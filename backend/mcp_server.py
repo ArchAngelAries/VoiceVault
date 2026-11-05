@@ -31,7 +31,7 @@ import urllib.request
 from typing import Any, Callable
 
 PROTOCOL = "2025-06-18"
-SERVER = {"name": "voicevault", "version": "0.1.0"}
+SERVER = {"name": "voicevault", "version": "0.1.1"}
 BASE = os.environ.get("VOICEVAULT_URL", "http://127.0.0.1:7763").rstrip("/")
 PATH_KEYS = {"path", "paths", "root", "roots", "runtime", "file_path", "folder", "source_path", "original_file",
              "preview_file", "dir"}

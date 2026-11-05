@@ -16,7 +16,7 @@ function resolvePythonExecutable(projectRoot, env = process.env, existsSync = fs
 function isVoiceVaultHealth(payload) {
   return payload?.status === 'ok'
     && payload?.service === 'voicevault-api'
-    && payload?.version === '0.1.0'
+    && payload?.version === '0.1.1'
 }
 
 function electronNodeEnvironment(env = process.env) {

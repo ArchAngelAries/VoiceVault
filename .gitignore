@@ -73,3 +73,6 @@ scripts/backend_demo.bat
 # Local-only lists
 *.local.txt
 *.local.md
+
+# Release files staged for upload (installer, trailer)
+release-upload-*/

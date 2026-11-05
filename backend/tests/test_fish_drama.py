@@ -370,3 +370,37 @@ def test_full_band_reference_copy_is_preferred_and_deleted_with_the_clip(tmp_pat
     old = audio_store.save_reference(refs, lo, 24000, "old.wav")      # older clips have no copy
     assert best_reference(refs / f"{old['reference_id']}.wav").suffix == ".wav"
     assert not best_reference(refs / f"{old['reference_id']}.wav").name.endswith(".hq44.wav")
+
+
+def test_out_of_memory_is_explained_and_the_next_request_restarts_the_server(tmp_path):
+    calls = {"n": 0}
+
+    def handler(request):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return httpx.Response(500, json={"error": {"message": "bad allocation"}})
+        return httpx.Response(200, content=_wav_bytes(), headers={"content-type": "audio/wav"})
+
+    server = FakeServer(handler)
+    engine = FishDramaEngine(settings_loader=lambda: {"audiocpp_dir": str(_runtime(tmp_path))}, server=server)
+    engine.load(ModelInfo("i", "fish_drama3", "f", "a", str(_gguf(tmp_path / "drama3.gguf")), 1, ModelState.INTEGRATED))
+    with pytest.raises(EngineError, match="ran out of memory.*Q4"):
+        engine.synthesize(SynthesisRequest(text="Hi"))
+    assert server.stops == 1 and not server.running
+    # Before the fix the engine stayed "not loaded" until the app restarted.
+    assert engine.synthesize(SynthesisRequest(text="Hi")).samples.size > 0
+    assert len(server.configs) == 2
+
+
+def test_load_is_refused_clearly_when_system_ram_cannot_hold_the_offloaded_experts(tmp_path, monkeypatch):
+    import engines.fish_drama as fd
+
+    monkeypatch.setattr(fd, "free_vram_bytes", lambda: int(15.5e9))
+    monkeypatch.setattr(fd, "host_expert_bytes", lambda size, layers: 18 * 1024 ** 3)
+    monkeypatch.setattr(fd, "free_ram_bytes", lambda: 10 * 1024 ** 3)
+    server = FakeServer(lambda r: None)
+    engine = FishDramaEngine(settings_loader=lambda: {"audiocpp_dir": str(_runtime(tmp_path)), "drama3_cpu_expert_layers": 28},
+                             server=server)
+    with pytest.raises(EngineError, match="18 GB in system RAM.*only 10 GB is free"):
+        engine.load(ModelInfo("i", "fish_drama3", "f", "a", str(_gguf(tmp_path / "drama3-q6.gguf")), 1, ModelState.INTEGRATED))
+    assert server.configs == []  # nothing was started

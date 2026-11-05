@@ -268,6 +268,24 @@ def auto_cpu_expert_layers(package_bytes: int, free_vram: Optional[int]) -> int:
     return int(min(LAYERS, -(-excess // per_layer)))
 
 
+def host_expert_bytes(package_bytes: int, layers: int) -> int:
+    """System RAM that audio.cpp needs for the expert layers kept off the graphics card."""
+    return int(max(0, layers) * max(1.0, (package_bytes - NON_EXPERT_BYTES) / LAYERS))
+
+
+def free_ram_bytes() -> Optional[int]:
+    try:
+        import psutil
+
+        return int(psutil.virtual_memory().available)
+    except Exception:  # psutil missing: skip the check
+        return None
+
+
+RAM_HEADROOM = 2 * 1024 ** 3
+_OUT_OF_MEMORY = ("bad allocation", "failed to allocate", "outofdevicememory", "out of memory")
+
+
 # ── Local engine (audio.cpp) ─────────────────────────────────────────────────
 
 class FishDramaEngine(TTSEngine):
@@ -338,6 +356,14 @@ class FishDramaEngine(TTSEngine):
             if layers < 0:
                 layers = auto_cpu_expert_layers(Path(model.path).stat().st_size, free_vram_bytes())
             self._cpu_expert_layers = layers
+            size = Path(model.path).stat().st_size if Path(model.path).is_file() else 0
+            need = host_expert_bytes(size, layers) if size else 0
+            free = free_ram_bytes() if need >= 1024 ** 3 else None
+            if free is not None and need + RAM_HEADROOM > free:
+                raise EngineError(
+                    f"{Path(model.path).name} keeps about {need / 1024 ** 3:.0f} GB in system RAM on this graphics card, "
+                    f"but only {free / 1024 ** 3:.0f} GB is free. Close other programs or unload other models, "
+                    "or pick the smaller Drama 3 Q4 build.")
             session["fish_drama3.cpu_expert_layers"] = layers
             if backend == "vulkan":
                 # Documented fix for incomplete Vulkan voice cloning.
@@ -366,8 +392,24 @@ class FishDramaEngine(TTSEngine):
         except RuntimeError as exc:
             raise EngineError(str(exc)) from exc
         self._model = model
+        self._device = device
         self._loaded_at = time.time()
         self._first_request = True
+
+    def _ensure_server(self) -> None:
+        """Restart the server if it stopped (after a crash or an out-of-memory failure)."""
+        if self._model is None:
+            raise EngineError("Drama 3 is not loaded.")
+        if not self._server.running or not self._server.base_url:
+            self.load(self._model, getattr(self, "_device", "cuda"))
+
+    def _refused(self, detail: str) -> EngineError:
+        if any(k in detail.lower() for k in _OUT_OF_MEMORY):
+            self._server.stop()  # a half-loaded server is not reused; the next request starts fresh
+            return EngineError(
+                "Drama 3 ran out of memory while loading. Close other programs or unload other models "
+                "(Generate → ⋮ menu → Unload model), or pick the smaller Drama 3 Q4 build.")
+        return EngineError(f"Drama 3 (audio.cpp) refused the request: {detail}")
 
     def unload(self) -> None:
         self._server.stop()
@@ -397,8 +439,7 @@ class FishDramaEngine(TTSEngine):
         return payload
 
     def synthesize(self, request: SynthesisRequest) -> SynthesisResult:
-        if self._model is None or not self._server.running or not self._server.base_url:
-            raise EngineError("Drama 3 is not loaded.")
+        self._ensure_server()
         payload = self.build_payload(request)
         started = time.time()
         try:
@@ -411,7 +452,7 @@ class FishDramaEngine(TTSEngine):
             if "context_length" in detail:
                 raise EngineError("The reference clip plus the text is too long for Drama 3's context. Raise "
                                   "'Context length' in Settings → TTS Engines (e.g. 6144), or use a shorter reference.")
-            raise EngineError(f"Drama 3 (audio.cpp) refused the request: {detail}")
+            raise self._refused(detail)
         samples, rate = decode_wav_bytes(response.content)
         elapsed = time.time() - started
         first = self._first_request
@@ -429,8 +470,7 @@ class FishDramaEngine(TTSEngine):
     def synthesize_stream(self, request: SynthesisRequest, on_audio: Callable[[np.ndarray, int], None],
                           cancel) -> SynthesisResult:
         """Stream PCM from audio.cpp as it is generated, so playback starts before the line is finished."""
-        if self._model is None or not self._server.running or not self._server.base_url:
-            raise EngineError("Drama 3 is not loaded.")
+        self._ensure_server()
         payload = {**self.build_payload(request), "stream": True, "stream_format": "sse", "response_format": "pcm"}
         started = time.time()
         first: Optional[float] = None
@@ -441,7 +481,7 @@ class FishDramaEngine(TTSEngine):
                                           timeout=httpx.Timeout(1800.0, connect=5.0)) as response:
                 if response.status_code != 200:
                     detail = _error_text(response) if response.is_closed else response.read().decode("utf-8", "replace")[:300]
-                    raise EngineError(f"Drama 3 (audio.cpp) refused the request: {detail}")
+                    raise self._refused(detail)
                 for line in response.iter_lines():
                     if cancel is not None and cancel.is_set():
                         raise SynthesisCancelled("Speech canceled during synthesis.")

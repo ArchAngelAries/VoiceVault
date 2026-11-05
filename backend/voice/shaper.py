@@ -149,13 +149,16 @@ def from_simple(analysis: Analysis, age: float = 0.0, pitch: float = 0.0, gender
         p.pitch_range *= 1.0 + 0.35 * y
         p.speed *= 1.0 + 0.05 * y
         p.brightness += 1.5 * y
-    elif a > 0:  # older: lower, breathier, rougher, slower, with a slight tremor
+    elif a > 0:  # older: shakier, rougher, breathier and slower; only slightly deeper
+        # Age is heard mostly as tremor and roughness. Women's voices drop a little with age and men's
+        # rise a little; a big pitch or formant drop just sounds "deeper", not older (tuned by ear 2026-11-05).
         o = a
-        p.formant_shift -= 4.0 * o
-        p.pitch_semitones -= (2.0 if current == "female" else 0.5) * o
+        p.formant_shift -= 0.5 * o
+        p.pitch_semitones += (0.0 if current == "female" else 0.3) * o
         p.breathiness += 0.30 * o
-        p.roughness += 0.45 * o
-        p.tremor_depth += 0.30 * o
+        p.roughness += 0.64 * o
+        p.tremor_depth += 1.1 * o
+        p.tremor_rate = 6.0
         p.speed *= max(0.2, 1.0 - 0.12 * o)
         p.pitch_range *= max(0.0, 1.0 - 0.15 * o)
         p.brightness -= 1.0 * o

@@ -314,3 +314,21 @@ def test_other_openai_servers_use_any_listed_embedding_model():
         return httpx.Response(404)
     embed = mem.openai_embedder("http://localhost:8080/v1", transport=httpx.MockTransport(handler))
     assert asyncio.run(embed(["x"]))[0] == "my-embed-model"
+
+
+def test_lmstudio_chat_asks_reasoning_models_not_to_think_and_others_are_untouched():
+    import httpx
+    from llm.client import stream_chat
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, text='data: {"choices":[{"delta":{"content":"Hi"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+                              headers={"content-type": "text/event-stream"})
+
+    async def collect(provider):
+        return [t async for t in stream_chat("http://localhost:1234/v1", "m", [{"role": "user", "content": "hi"}], None,
+                                             provider=provider, transport=httpx.MockTransport(handler))]
+    assert asyncio.run(collect("lmstudio")) == ["Hi"]
+    assert asyncio.run(collect("openai_compatible")) == ["Hi"]
+    assert seen[0]["reasoning_effort"] == "none" and "reasoning_effort" not in seen[1]

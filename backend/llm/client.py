@@ -171,9 +171,14 @@ async def stream_chat(base_url: str, model: str, messages: list[dict[str, str]],
                     raise StreamProtocolError("The model service ended the reply early.")
         return
 
+    body: dict[str, object] = {"model": model, "messages": messages, "stream": True}
+    if provider == "lmstudio":
+        # Reasoning models otherwise "think" silently for 5-20 s before the first word, which ruins
+        # live character chat. LM Studio ignores this for models that do not reason.
+        body["reasoning_effort"] = "none"
     async with httpx.AsyncClient(timeout=httpx.Timeout(120, connect=10), transport=transport) as client:
         async with client.stream("POST", f"{base_url}/chat/completions", headers=headers,
-                                 json={"model": model, "messages": messages, "stream": True}) as response:
+                                 json=body) as response:
             if response.status_code >= 400:
                 # Do not expose upstream body; services sometimes echo request credentials.
                 raise UpstreamError(response.status_code)

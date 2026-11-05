@@ -15,7 +15,9 @@ Free and open source, forever. No account, no subscription, no tracking.</p>
 
 VoiceVault runs AI voice, music and chat models on your own PC. Your audio, voices and chats stay on your computer.
 
-![VoiceVault: chatting with Captain Mara Vale, a character with her own designed voice](docs/screenshots/converse.jpg)
+[![Watch the VoiceVault trailer (7 min). Every voice, note and sound effect in it was made with VoiceVault.](docs/screenshots/trailer-thumbnail.jpg)](https://youtu.be/P9iKEC1qNhg)
+
+<p align="center"><b>▶ <a href="https://youtu.be/P9iKEC1qNhg">Watch the trailer on YouTube</a></b> (7 min). Every voice, note and sound effect in it was made with VoiceVault, and the narrator explains how. Also available as a <a href="https://github.com/ArchAngelAries/VoiceVault/releases/download/v0.1.1/VoiceVault_trailer.mp4">download</a> with <a href="https://github.com/ArchAngelAries/VoiceVault/releases/download/v0.1.1/VoiceVault_trailer.en.srt">English captions</a>.</p>
 
 > **Status:** pre-release. A Windows installer is available; models download inside the app (Settings → Models).
 
@@ -136,6 +138,7 @@ VoiceVault is a tool. You are responsible for what you create with it and must f
 - [docs/API_KEYS.md](docs/API_KEYS.md) — getting and adding API keys
 - [docs/MODEL_LICENSES.md](docs/MODEL_LICENSES.md) — every model, its licence and download page
 - [docs/TERMS_OF_USE.md](docs/TERMS_OF_USE.md) — terms of use
+- [CHANGELOG.md](CHANGELOG.md) — what changed in each release
 - [CREDITS.md](CREDITS.md) — thank you to every model, library and data provider VoiceVault builds on
 - [docs/HARDWARE_MATRIX.md](docs/HARDWARE_MATRIX.md) — measured speed on different graphics cards and CPU-only
 - [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — connecting AI agents (MCP)

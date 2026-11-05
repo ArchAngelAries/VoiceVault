@@ -8,7 +8,7 @@ User disclaimer, shown on the page: users are responsible for what they create. 
 
 - **Age.** −1 is a young child, 0 as recorded, +1 elderly. The slider runs from −1.5 to +2, and the API accepts any value.
   - Younger: shorter vocal tract (+28% formants from a man, +15% from a woman), pitch heads toward a child's ~275 Hz, livelier and brighter.
-  - Older: lower, breathier, rougher, slight tremor, slower.
+  - Older: shakier (tremor), rougher, breathier and slower, but not much deeper: that is how age is actually heard. Men's voices rise slightly with age.
 - **Pitch.** Semitones, with resonances kept, so it stays the same person. Not the chipmunk effect.
 - **Gender.** As recorded, Female or Male, with a strength control (0–150%).
   - Pitch moves to a typical female (~205 Hz) or male (~110 Hz) speaking pitch, measured from the source.
