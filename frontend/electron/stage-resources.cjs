@@ -22,7 +22,7 @@ const COPIES = [
   { from: 'runtime/audiocpp/config-examples', filter: 'runtime' },
   ...['install_torch.py', 'bootstrap_env.py', 'setup_project.py', 'setup_training_runtime.py', 'training_requirements.lock']
     .map(name => ({ from: `scripts/${name}` })),
-  ...['LICENSE', 'TRADEMARK.md', 'README.md', 'THIRD_PARTY_NOTICES.md'].map(name => ({ from: name })),
+  ...['LICENSE', 'TRADEMARK.md', 'README.md', 'THIRD_PARTY_NOTICES.md', 'CREDITS.md'].map(name => ({ from: name })),
   ...['API_KEYS.md', 'MODEL_LICENSES.md', 'TERMS_OF_USE.md', 'AGENT_MANUAL.md', 'CHAT_MEMORY.md', 'assets/logo-512.png']
     .map(name => ({ from: `docs/${name}` })),
   ...['uv.exe', 'LICENSE-MIT.txt', 'LICENSE-APACHE.txt', 'uv-source.json']

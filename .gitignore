@@ -72,3 +72,4 @@ scripts/backend_demo.bat
 
 # Local-only lists
 *.local.txt
+*.local.md
