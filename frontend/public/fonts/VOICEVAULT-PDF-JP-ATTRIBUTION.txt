@@ -1,0 +1,15 @@
+VoiceVault PDF Japanese fonts
+
+The static Regular and Bold TrueType files in the application are derived from
+Noto Sans JP by instantiating its wght axis at 400 and 700. The family and
+PostScript names were changed to VoiceVault PDF Japanese names for this
+modified version.
+
+Upstream project: https://github.com/google/fonts/tree/main/ofl/notosansjp
+Source file: NotoSansJP[wght].ttf
+Upstream source commit: notofonts/noto-cjk 523d033d6cb47f4a80c58a35753646f5c3608a78
+Source copyright: Copyright 2014-2021 Adobe. Reserved Font Name: Source.
+Source SHA-256: C2F3B4D463500A2DDCD3849CDED1FCEEB9FD6D1C32E6CBECD568453BA50FC68F
+
+The font software remains under the SIL Open Font License 1.1. See
+OFL-NotoSansJP.txt in this directory for the full license text.

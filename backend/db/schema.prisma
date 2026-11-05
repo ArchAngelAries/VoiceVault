@@ -1,0 +1,129 @@
+// backend/db/schema.prisma
+// VoiceVault SQLite schema — Phase 1 Foundation
+
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = -1
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./voicevault.db"
+}
+
+// ── Collections ───────────────────────────────────────────────────────────────
+
+model Collection {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  name        String
+  description String?
+  cover_url   String?
+  is_system   Boolean  @default(false)
+  sort_order  Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  items      CollectionItem[]
+  tier_lists TierList[]
+
+  @@index([is_system])
+  @@index([sort_order])
+}
+
+// ── Collection Items ──────────────────────────────────────────────────────────
+
+model CollectionItem {
+  id            Int      @id @default(autoincrement())
+  collection_id Int
+  item_id       String
+  item_type     String
+  source        String
+  title         String
+  cover_url     String?
+  year          Int?
+  added_at      DateTime @default(now())
+  sort_order    Int      @default(0)
+  notes         String?
+
+  collection Collection @relation(fields: [collection_id], references: [id], onDelete: Cascade)
+
+  @@unique([collection_id, item_id])
+  @@index([collection_id])
+  @@index([item_id])
+  @@index([item_type])
+}
+
+// ── Tier Lists ────────────────────────────────────────────────────────────────
+
+model TierList {
+  id            Int      @id @default(autoincrement())
+  name          String
+  description   String?
+  template      String   @default("SABC")
+  collection_id Int?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  collection Collection? @relation(fields: [collection_id], references: [id], onDelete: SetNull)
+  tiers      TierRow[]
+
+  @@index([collection_id])
+}
+
+model TierRow {
+  id           Int    @id @default(autoincrement())
+  tier_list_id Int
+  label        String
+  color        String
+  sort_order   Int
+  items        String
+
+  tier_list TierList @relation(fields: [tier_list_id], references: [id], onDelete: Cascade)
+
+  @@index([tier_list_id])
+}
+
+// ── Characters ────────────────────────────────────────────────────────────────
+
+model Character {
+  id              Int      @id @default(autoincrement())
+  item_id         String   @unique
+  source          String
+  name            String
+  name_native     String?
+  image_url       String?
+  description     String?
+  media_title     String?
+  media_item_id   String?
+  tags            String?
+  speech_patterns String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  clips Clip[]
+
+  @@index([source])
+}
+
+// ── Clips ─────────────────────────────────────────────────────────────────────
+
+model Clip {
+  id               Int      @id @default(autoincrement())
+  character_id     Int?
+  file_path        String   @unique
+  duration_ms      Int?
+  transcript       String?
+  quality_score    Float?
+  emotion_tag      String?
+  source_url       String?
+  source_ts_start  Float?
+  source_ts_end    Float?
+  created_at       DateTime @default(now())
+
+  character Character? @relation(fields: [character_id], references: [id], onDelete: SetNull)
+
+  @@index([character_id])
+  @@index([emotion_tag])
+}

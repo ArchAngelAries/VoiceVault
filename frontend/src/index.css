@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Theme variables: defaults are "Midnight"; data/themes.js swaps them at run time. */
+  :root {
+    --vv-bg: 10 10 15; --vv-surface: 18 18 26; --vv-elevated: 26 26 38; --vv-border: 42 42 61;
+    --vv-accent: 124 92 191; --vv-accent2: 191 92 155; --vv-glow: 157 123 232;
+    --vv-text: 232 228 240; --vv-muted: 122 117 144; --vv-on-accent: 255 255 255;
+    --vv-accent-gradient: linear-gradient(135deg, rgb(124 92 191), rgb(191 92 155));
+    --vv-bg-gradient: none;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body, #root {
+    height: 100%;
+    background: rgb(var(--vv-bg));
+    color: rgb(var(--vv-text));
+    font-family: 'DM Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+  body { background-image: var(--vv-bg-gradient); background-attachment: fixed; }
+
+  /* Native dropdowns and inputs follow the theme too. */
+  select, option, input, textarea { color: rgb(var(--vv-text)); }
+  option { background: rgb(var(--vv-elevated)); }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: rgb(var(--vv-surface)); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--vv-border)); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgb(var(--vv-accent)); }
+
+  ::selection { background: rgb(var(--vv-accent) / 0.35); color: rgb(var(--vv-text)); }
+
+  /* Light themes: status colours need darker shades to stay readable on pale backgrounds. */
+  [data-theme-mode="light"] .text-red-200, [data-theme-mode="light"] .text-red-300 { color: rgb(185 28 28); }
+  [data-theme-mode="light"] .text-emerald-200, [data-theme-mode="light"] .text-emerald-300, [data-theme-mode="light"] .text-emerald-400 { color: rgb(4 120 87); }
+  [data-theme-mode="light"] .text-amber-200, [data-theme-mode="light"] .text-amber-300, [data-theme-mode="light"] .text-amber-400 { color: rgb(161 98 7); }
+  [data-theme-mode="light"] .text-sky-300, [data-theme-mode="light"] .text-blue-300 { color: rgb(3 105 161); }
+  [data-theme-mode="light"] .text-white:not(.vault-btn-primary *):not(.vault-btn-primary) { color: rgb(var(--vv-text)); }
+  [data-theme-mode="light"] .bg-black\/30, [data-theme-mode="light"] .bg-black\/70, [data-theme-mode="light"] .bg-black\/75 { background-color: rgb(40 30 60 / 0.35); }
+
+  /* Pride: flamboyant on purpose. Rainbow buttons, headings, active nav, focus rings and scrollbar. */
+  [data-theme="pride"] h1, [data-theme="pride"] .font-display.text-2xl {
+    background: var(--vv-accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  [data-theme="pride"] .nav-item.active { box-shadow: 0 0 0 1px rgb(255 255 255 / 0.15), 0 0 16px rgb(236 72 153 / 0.35); }
+  [data-theme="pride"] aside { border-image: linear-gradient(180deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982) 1; }
+  [data-theme="pride"] ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #e40303, #ff8c00, #ffed00, #008026, #24408e, #732982); }
+  [data-theme="pride"] .vault-card { box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.04); }
+  [data-theme="pride"] :focus-visible { outline: 2px solid #ffed00; outline-offset: 2px; }
+  [data-theme="pride"] .vault-btn-primary, [data-theme="pride"] .bg-accent-gradient { text-shadow: 0 1px 2px rgb(0 0 0 / 0.65), 0 0 1px rgb(0 0 0 / 0.8); }
+}
+
+@layer components {
+  .vault-card {
+    @apply bg-vault-surface border border-vault-border rounded-xl;
+  }
+  .vault-card-elevated {
+    @apply bg-vault-elevated border border-vault-border rounded-xl;
+  }
+  .vault-btn-primary {
+    @apply bg-accent-gradient text-vault-on-accent font-display font-semibold px-5 py-2.5 rounded-lg
+           hover:shadow-glow-sm transition-all duration-200 active:scale-95;
+  }
+  .vault-btn-ghost {
+    @apply border border-vault-border text-vault-muted hover:text-vault-text hover:border-vault-accent
+           font-body px-5 py-2.5 rounded-lg transition-all duration-200;
+  }
+  .vault-label {
+    @apply text-xs font-mono text-vault-muted uppercase tracking-widest;
+  }
+  .nav-item {
+    @apply flex flex-col items-center gap-1 px-3 py-2.5 rounded-lg cursor-pointer
+           text-vault-muted hover:text-vault-text hover:bg-vault-elevated
+           transition-all duration-200 select-none;
+  }
+  .nav-item.active {
+    @apply text-vault-glow bg-vault-elevated shadow-glow-sm;
+  }
+}

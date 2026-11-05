@@ -1,0 +1,74 @@
+# VoiceVault — never publish these. They hold personal data, credentials, or this PC's state.
+# See docs/RELEASE_CHECKLIST.md. (A plain list; it does not set up git.)
+
+# Credentials and personal state
+backend/voicevault_settings.json
+backend/voicevault_settings.*.json
+!backend/voicevault_settings.example.json
+backend/db/*.db
+backend/db/*.corrupt-*
+backend/data/
+data/
+Library/
+.env
+*.env
+
+# Legacy and stray folders
+Voices/
+VoiceVault/
+
+# Dev tooling and caches
+.claude/
+.pytest_cache/
+.pytest-runtime/
+.snapshot-test-tmp/
+backend/.pytest_discover_tmp/
+__pycache__/
+*.pyc
+venv/
+node_modules/
+frontend/release/
+frontend/release-staging/
+frontend/build-resources/
+frontend/dist/
+scripts/backend_scratch.bat
+
+# Local runtime downloads and model-conversion tooling
+runtime/audiocpp/downloads/
+runtime/drama3-convert/
+
+# Internal working notes (contain local paths and test logs)
+docs/HANDOFF.md
+docs/DEVELOPMENT_STATUS.md
+docs/REFERENCE_SOURCES.md
+docs/API_SNAPSHOTS.md
+docs/BREEZE_WORKFLOWS.md
+docs/CHARACTER_CHAT_AND_VOICE.md
+docs/DRAMA3_AND_VOICESTUDIO.md
+docs/LIVE_CHAT_EXPECTATIONS.md
+docs/MODEL_MANAGER_PLAN.md
+docs/PERFORMANCE_PLAN.md
+docs/PORTABILITY.md
+docs/RELEASE_DONE.md
+docs/ROADMAP.md
+docs/SHIP_AUDIT.md
+docs/TTS_MODEL_INVENTORY.md
+VOICEVAULT_PROJECT.md
+scripts/audit-strings.local.txt
+
+# Test leftovers
+backend/.pytest*/
+.pytest*/
+
+# audio.cpp binaries: the installer bundles them; source users download them in Settings -> Models
+runtime/audiocpp/
+
+# Third-party runtimes the user installs themselves (never redistributed)
+runtime/espeak-ng/
+
+# Demo profile for screenshots and videos (holds a copy of settings with keys)
+demo-profile/
+scripts/backend_demo.bat
+
+# Local-only lists
+*.local.txt

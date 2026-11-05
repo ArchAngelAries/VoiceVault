@@ -1,0 +1,12 @@
+# Speech runtime (TTS, ASR). Install AFTER the ROCm torch from scripts/install_torch.py.
+# torch is deliberately NOT listed here: pip must never replace the ROCm build.
+transformers==5.3.0       # OmniVoice needs 5.3+; Maya1 and Whisper run on it (verified 2026-10-09)
+accelerate==1.15.0        # device_map loading
+huggingface_hub==1.33.0   # pulled in by transformers 5.3; listed so the pin is explicit
+snac==1.2.1               # SNAC 24 kHz codec used by Maya1 (weights from the Hugging Face hub)
+librosa==1.0.0            # OmniVoice audio utilities
+soundfile==0.14.0         # OmniVoice audio I/O
+diffusers==0.41.0         # VibeVoice diffusion scheduler (vendored code); installed with --no-deps, see below
+# omnivoice==0.2.1 is installed separately with --no-deps:
+#   pip install --no-deps omnivoice==0.2.1
+# Its own requirements include gradio and webdataset, which inference does not need.
