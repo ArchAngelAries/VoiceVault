@@ -14,6 +14,7 @@ import {
 } from '@/components/Settings/SettingsField'
 import ModelManager from '@/components/Settings/ModelManager'
 import ThemePicker from '@/components/Settings/ThemePicker'
+import UpdateCheckNow from '@/components/Settings/UpdateCheckNow'
 import { applyTheme, savedTheme } from '@/data/themes'
 import clsx from 'clsx'
 
@@ -118,6 +119,13 @@ export default function Settings() {
               <SettingsField label="Outputs Directory" hint="Root folder for generated audio files">
                 <TextInput value={settings.outputs_dir} onChange={set('outputs_dir')} placeholder="Leave empty to use the app's data folder" />
               </SettingsField>
+            </SettingsSection>
+
+            <SettingsSection title="Updates" description="Once a day VoiceVault asks GitHub whether a newer release exists. Only that question is sent: nothing about you, your PC or your library. Updates are never downloaded or installed without your click.">
+              <SettingsField label="Check for updates automatically" hint="When a new version is out, a banner offers to download it. The download is checked against GitHub's SHA-256 fingerprint before you can install it.">
+                <ToggleInput value={settings.update_check !== false} onChange={set('update_check')} label="Check once a day" />
+              </SettingsField>
+              <UpdateCheckNow />
             </SettingsSection>
 
             <SettingsSection title="Experimental" description="Features that are not ready for everyone.">

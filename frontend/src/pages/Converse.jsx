@@ -9,6 +9,7 @@ import { normalizeScene } from '@/components/converse/sceneSettings'
 import ChatCharacterPicker from '@/components/converse/ChatCharacterPicker'
 import CharacterAvatar from '@/components/converse/CharacterAvatar'
 import CharacterPortraitEditor from '@/components/converse/CharacterPortraitEditor'
+import { castPayload, createCastMember, getCastMember, listCast, listPersonas, personaSnapshot, updateCastMember } from '@/api/cast'
 import ProfileSuggestions from '@/components/converse/ProfileSuggestions.jsx'
 import { resolveSuggestionVoice } from '@/components/converse/profileSuggestions.js'
 import { spokenText } from '@/components/converse/spokenText'
@@ -94,6 +95,12 @@ export default function Converse({ sceneCreation = false }) {
   const [speechTiming, setSpeechTiming] = useState(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [personas, setPersonas] = useState([])
+  const [defaultPersonaId, setDefaultPersonaId] = useState(null)
+  const [castMembers, setCastMembers] = useState([])
+  const [castBusy, setCastBusy] = useState(false)
+  const [personasLoaded, setPersonasLoaded] = useState(false)
+  const castParamHandledRef = useRef(false)
   const controllerRef = useRef(null)
   const audioRef = useRef(null)
   const segmentAudioRefs = useRef(new Map())
@@ -470,7 +477,7 @@ export default function Converse({ sceneCreation = false }) {
     setCreating(true)
     try {
       const initialRoster = [{ id: 'primary', profile: { ...EMPTY_PROFILE } }]
-      const item = await createSession({ ...buildRosterPayload(initialRoster, sceneCreation ? 'New scene' : 'New chat'), kind: sceneCreation ? 'scene' : 'chat', spoken_replies: !sceneCreation })
+      const item = await createSession({ ...buildRosterPayload(initialRoster, sceneCreation ? 'New scene' : 'New chat'), kind: sceneCreation ? 'scene' : 'chat', spoken_replies: !sceneCreation, ...(sceneCreation ? { user_persona: defaultPersona() } : {}) })
       if (!aliveRef.current) return
       setSessions(current => [item, ...current.filter(old => old.id !== item.id)])
       if (identity !== requestIdentityRef.current) return
@@ -507,7 +514,7 @@ export default function Converse({ sceneCreation = false }) {
     setCreating(true)
     setError('')
     try {
-      const item = await createSession({ kind: 'chat', roleplay: true, character_id,
+      const item = await createSession({ kind: 'chat', roleplay: true, character_id, user_persona: defaultPersona(),
         profile: selectedProfile || { ...EMPTY_PROFILE },
         title: `${selectedProfile?.name || 'Custom character'} chat`, spoken_replies: true })
       if (!aliveRef.current || identity !== requestIdentityRef.current) return
@@ -533,7 +540,7 @@ export default function Converse({ sceneCreation = false }) {
     setCreating(true)
     setError('')
     try {
-      const item = await createSession({ ...requestedRoster, kind: sceneCreation ? 'scene' : 'chat' })
+      const item = await createSession({ ...requestedRoster, kind: sceneCreation ? 'scene' : 'chat', ...(sceneCreation ? { user_persona: defaultPersona() } : {}) })
       if (!aliveRef.current) return
       const fresh = { ...item, messages: item.messages || [] }
       setSessions(current => [fresh, ...current.filter(old => old.id !== fresh.id)])
@@ -672,6 +679,91 @@ export default function Converse({ sceneCreation = false }) {
       }
     } catch (e) { setError(`Could not save character profile: ${ERROR_TEXT(e)}`) }
     finally { if (aliveRef.current) setSaving(false) }
+  }
+
+  // ── Cast and personas ──
+  const refreshCastAndPersonas = useCallback(async () => {
+    try {
+      const [personaList, cast] = await Promise.all([listPersonas(), listCast()])
+      if (!aliveRef.current) return
+      setPersonas(personaList.personas || [])
+      setDefaultPersonaId(personaList.default_id || null)
+      setCastMembers(cast || [])
+    } catch { /* The Cast is optional; chats work without it. */ }
+    finally { if (aliveRef.current) setPersonasLoaded(true) }
+  }, [])
+  useEffect(() => { refreshCastAndPersonas() }, [refreshCastAndPersonas])
+
+  function defaultPersona() {
+    return personaSnapshot(personas.find(item => item.id === defaultPersonaId)) || null
+  }
+
+  // Cast → Chat opens /converse?cast=<id>
+  useEffect(() => {
+    if (sceneCreation || loading || !personasLoaded || castParamHandledRef.current) return
+    const castId = new URLSearchParams(location.search).get('cast')
+    if (!castId) return
+    castParamHandledRef.current = true
+    navigate('/converse', { replace: true })
+    getCastMember(castId)
+      .then(async member => {
+        const existing = sessions.find(item => item.roleplay && item.character_id === `cast:${member.id}`)
+        await assignChatCharacter({ profile: member.profile, character_id: `cast:${member.id}` })
+        if (existing && aliveRef.current) {
+          setNotice(`Opened your existing chat with ${member.profile?.name || 'this character'}. If you changed them in Cast since, choose them under "Load from your Cast…" and press Save profile to update this chat.`)
+        }
+      })
+      .catch(e => setError(`Could not open this cast member: ${ERROR_TEXT(e)}`))
+  }, [sceneCreation, loading, personasLoaded, location.search])
+
+  const changePersona = async id => {
+    if (!session) return
+    const chosen = id ? personaSnapshot(personas.find(item => item.id === id)) : null
+    if (id && !chosen) return
+    try {
+      const updated = await updateSession(session.id, { user_persona: chosen })
+      if (!aliveRef.current) return
+      setSession(current => current?.id === updated.id ? { ...current, user_persona: updated.user_persona } : current)
+      setSessions(current => current.map(item => item.id === updated.id ? { ...item, user_persona: updated.user_persona } : item))
+      setNotice(chosen ? `You're now playing ${chosen.name}.` : 'You are now chatting as yourself.')
+    } catch (e) { setError(`Could not change persona: ${ERROR_TEXT(e)}`) }
+  }
+
+  const loadFromCast = async castId => {
+    if (!castId) return
+    try {
+      const member = await getCastMember(castId)
+      if (!aliveRef.current) return
+      setActiveProfile({ ...EMPTY_PROFILE, ...member.profile })
+      applySpeechSettings(member.profile?.voice_settings || null)
+      setHasSavedSpeechSettings(!!member.profile?.voice_settings?.model_id)
+      setNotice(`${member.profile?.name || 'Cast member'} loaded from your Cast. Use Save profile to keep it in this conversation.`)
+    } catch (e) { setError(`Could not load from the Cast: ${ERROR_TEXT(e)}`) }
+  }
+
+  const saveToCast = async () => {
+    const current = saveableProfile()
+    if (!current.name?.trim()) { setError('Name the character before saving it to your Cast.'); return }
+    setCastBusy(true)
+    setError('')
+    try {
+      let existing = current.cast_id ? await getCastMember(current.cast_id).catch(() => null) : null
+      if (!existing && current.catalog_identity) existing = castMembers.find(item => item.profile?.catalog_identity === current.catalog_identity) || null
+      if (existing && !current.cast_id && !window.confirm(`${existing.profile?.name || 'This character'} is already in your Cast. Replace its saved setup with this one? The current version stays in its History.`)) return
+      // Edited outside the lore check: the result needs the user's review again, and an established
+      // character's sources no longer vouch for every line.
+      const reviewNote = 'Edited in a conversation after the lore check; review it before relying on it.'
+      const questions = existing?.kind === 'established' && existing?.sources?.length
+        ? [...(existing.open_questions || []).filter(q => q !== reviewNote), reviewNote].slice(-20) : (existing?.open_questions || [])
+      const saved = existing
+        ? await updateCastMember(existing.id, castPayload(existing, current, { note: 'Saved from a conversation', review_state: 'draft', open_questions: questions }))
+        : await createCastMember(castPayload(null, current))
+      if (!aliveRef.current) return
+      setActiveProfile({ ...profile, cast_id: saved.id })
+      await refreshCastAndPersonas()
+      setNotice(`Saved to your Cast. Use Save profile to link this conversation to ${saved.profile?.name}.`)
+    } catch (e) { setError(`Could not save to the Cast: ${ERROR_TEXT(e)}`) }
+    finally { if (aliveRef.current) setCastBusy(false) }
   }
 
   const applyAudioTranscript = (mode, text) => {
@@ -1176,9 +1268,10 @@ export default function Converse({ sceneCreation = false }) {
               return <div key={`${index}-${message.role}`} className={`flex items-start gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {characterReply && <CharacterAvatar name={speakerName} imageUrl={speakerProfile?.portrait_override_url || speakerProfile?.image_url} size={32} />}
                 <div className={`min-w-0 ${characterReply ? 'max-w-[calc(100%-3rem)]' : 'max-w-[88%]'} rounded-2xl px-4 py-3 ${message.role === 'user' ? 'bg-vault-accent/20 border border-vault-accent/25 text-vault-text rounded-br-md' : 'bg-vault-elevated border border-vault-border text-vault-text rounded-bl-md'}`}>
-                  <div className="text-[10px] font-mono text-vault-muted mb-1">{message.role === 'user' ? 'YOU' : characterReply ? speakerName.toUpperCase() : 'ASSISTANT'}{message.role === 'assistant' && message.status && message.status !== 'complete' && <span className="ml-2 text-amber-300">{message.status === 'interrupted' ? 'PARTIAL · INTERRUPTED' : message.status.toUpperCase()}</span>}</div>
+                  <div className="text-[10px] font-mono text-vault-muted mb-1">{message.role === 'user' ? (message.persona_name ? message.persona_name.toUpperCase() : 'YOU') : characterReply ? speakerName.toUpperCase() : 'ASSISTANT'}{message.role === 'assistant' && message.status && message.status !== 'complete' && <span className="ml-2 text-amber-300">{message.status === 'interrupted' ? 'PARTIAL · INTERRUPTED' : message.status.toUpperCase()}</span>}</div>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content || (sending && index === messages.length - 1 ? <span className="inline-flex items-center gap-2 text-vault-muted"><Loader2 size={13} className="animate-spin" />Thinking…</span> : '')}</p>
                 </div>
+                {message.role === 'user' && message.persona_name && <CharacterAvatar name={message.persona_name} imageUrl={message.persona_avatar_url} size={32} />}
               </div>
             })}
           </div>
@@ -1226,6 +1319,20 @@ export default function Converse({ sceneCreation = false }) {
             canRun={!!session && connected && !!model} progress={sceneProgress} />
           <p className="text-[10px] leading-relaxed text-vault-muted">Each round follows your selected order and saves attributed replies. Run scene saves these choices and continues from the context and existing history. Your message draft is sent only with Send.</p></>}
 
+          {(sceneCreation || roleplay) && session && <section className="border-t border-vault-border pt-4 flex flex-col gap-2">
+            <span className="vault-label">You're playing</span>
+            <div className="flex items-center gap-2">
+              <CharacterAvatar name={session.user_persona?.name || 'You'} imageUrl={session.user_persona?.avatar_url} size={32} />
+              <select aria-label="Your persona" value={session.user_persona?.id || ''} onChange={e => changePersona(e.target.value)} disabled={sending || saving || creating}
+                className="flex-1 min-w-0 bg-vault-elevated border border-vault-border rounded-lg px-2 py-1.5 text-xs text-vault-text">
+                <option value="">Yourself (no persona)</option>
+                {personas.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {session.user_persona?.name && !personas.some(item => item.id === session.user_persona.id) && <option value={session.user_persona.id || ''} disabled>{session.user_persona.name} (kept in this chat)</option>}
+              </select>
+            </div>
+            <button type="button" onClick={() => navigate('/cast?tab=personas')} className="self-start text-[11px] text-vault-accent hover:text-vault-glow">Create or edit personas</button>
+          </section>}
+
           {(sceneCreation || roleplay) && <section className="border-t border-vault-border pt-4 flex flex-col gap-3">
             <div className="flex items-center justify-between"><span className="vault-label">{sceneCreation && selectedCharacter?.id === 'primary' ? 'Primary character' : 'Character profile'} · {profile.name || 'Unnamed'}</span><div className="flex items-center gap-2">{selectedCharacter?.id !== 'primary' && <button type="button" onClick={() => removeCharacter(activeSpeakerId)} disabled={saving || sending} title="Remove this character; keep their messages" aria-label="Remove character" className="text-vault-muted hover:text-red-300 disabled:opacity-40"><Trash2 size={14} /></button>}<button type="button" onClick={saveProfile} disabled={!session || saving || sending || portraitUploading} className="text-vault-muted hover:text-vault-text disabled:opacity-40" title="Save character profile">{saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}</button></div></div>
             {sceneCreation && <label className="flex flex-col gap-1"><span className="text-[11px] text-vault-muted">Conversation title</span><input value={title} onChange={e => updateTitle(e.target.value)} maxLength={120} disabled={sending || saving || creating} className="w-full bg-vault-elevated border border-vault-border rounded-lg px-3 py-2 text-xs text-vault-text" /></label>}
@@ -1237,9 +1344,19 @@ export default function Converse({ sceneCreation = false }) {
             <ProfileSuggestions key={`suggest:${session?.id || 'new'}:${activeSpeakerId}`} profile={profile} provider={provider} endpoint={endpoint} model={model} apiKey={apiKey} nameOnlyContext={isNativeCloudProvider(provider) && nameOnlyCloudContext}
               connected={connected} voiceContext={resolveSuggestionVoice(profile, ttsModels, ttsEngines)} disabled={sending || saving || creating || portraitUploading}
               onApply={next => { setActiveProfile(next); setNotice('Reviewed suggestion applied to the editor. Use Save profile to keep it.') }} />
-            {[["description", "Description / sourced context", "Who is this character? Include source notes and uncertainty."], ["personality", "Personality direction", "How should the model speak and respond?"], ["source_notes", "Sources & uncertainty", "What is sourced, inferred, or unknown?"], ["voice_description", "Voice description", "Optional voice design description for supported TTS models."]].map(([key, label, placeholder]) => <label key={key} className="flex flex-col gap-1"><span className="text-[11px] text-vault-muted">{label}</span><textarea value={profile[key]} onChange={e => updateProfile(key, e.target.value)} rows={key === 'source_notes' ? 3 : 2} maxLength={key === 'description' || key === 'source_notes' ? 4000 : key === 'voice_description' ? 1000 : 3000} disabled={sending || saving || creating} placeholder={placeholder} className="w-full resize-y bg-vault-elevated border border-vault-border rounded-lg px-3 py-2 text-xs text-vault-text placeholder:text-vault-muted/60" /></label>)}
+            <div className="flex flex-wrap items-center gap-2">
+              <select aria-label="Load a character from your Cast" value="" onChange={e => loadFromCast(e.target.value)} disabled={!castMembers.length || sending || saving || creating || castBusy}
+                className="flex-1 min-w-0 bg-vault-elevated border border-vault-border rounded-lg px-2 py-1.5 text-xs text-vault-text disabled:opacity-50">
+                <option value="">{castMembers.length ? 'Load from your Cast…' : 'Your Cast is empty'}</option>
+                {castMembers.map(item => <option key={item.id} value={item.id}>{item.profile?.name || 'Unnamed'}{item.variant ? ` (${item.variant})` : ''}</option>)}
+              </select>
+              <button type="button" onClick={saveToCast} disabled={sending || saving || creating || castBusy || portraitUploading}
+                title="Keep this character (persona, portrait and voice) in your Cast to reuse anywhere" className="vault-btn-ghost inline-flex items-center gap-1.5 !px-2.5 !py-1.5 text-xs disabled:opacity-40">
+                {castBusy ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}Save to Cast</button>
+            </div>
+            {[["description", "Description / sourced context", "Who is this character? Include source notes and uncertainty.", 4000], ["personality", "Personality direction", "How should the model speak and respond?", 4000], ["speaking_style", "Way of speaking", "Vocabulary, rhythm, catchphrases.", 2000], ["background", "Background and lore", "History and key events.", 4000], ["relationships", "Relationships", "Who matters to them.", 2000], ["boundaries", "Never does", "Things they would never say or do.", 1000], ["example_lines", "Example lines", "A few lines in their voice.", 2000], ["source_notes", "Sources & uncertainty", "What is sourced, inferred, or unknown?", 4000], ["voice_description", "Voice description", "Optional voice design description for supported TTS models.", 1000]].map(([key, label, placeholder, max]) => <label key={key} className="flex flex-col gap-1"><span className="text-[11px] text-vault-muted">{label}</span><textarea value={profile[key] || ''} onChange={e => updateProfile(key, e.target.value)} rows={key === 'source_notes' ? 3 : 2} maxLength={max} disabled={sending || saving || creating} placeholder={placeholder} className="w-full resize-y bg-vault-elevated border border-vault-border rounded-lg px-3 py-2 text-xs text-vault-text placeholder:text-vault-muted/60" /></label>)}
             <button type="button" onClick={saveProfile} disabled={!session || saving || sending || portraitUploading} className="vault-btn-ghost inline-flex items-center justify-center gap-2 px-3 py-2 text-xs disabled:opacity-40">{saving ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}{saving ? 'Saving…' : 'Save profile'}</button>
-            {!sceneCreation && <p className="text-[10px] text-vault-muted">Catalog context can be incomplete. Edit personality and source notes; no lore research is performed automatically.</p>}
+            {!sceneCreation && <p className="text-[10px] text-vault-muted">Catalog context can be incomplete. Save to Cast to reuse this character anywhere; in Cast, Craft with AI builds a sourced persona.</p>}
           </section>}
 
           <section className="border-t border-vault-border pt-4 flex flex-col gap-3">

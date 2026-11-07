@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.2.0 — 2026-11-07
+
+### Cast (new page)
+- **Set a character up once and use them anywhere.** A cast member keeps a portrait, a full persona (personality, way of speaking, background, relationships, things they'd never do, example lines) and a voice, and fills any chat or scene in one click. Add favourites from Discover, or create your own characters.
+- **Craft with AI, lore-checked.** For an established character, VoiceVault reads their Wikipedia article and drafts the persona from it with your chat model. A second pass must find an exact supporting quote for every statement, and VoiceVault confirms the quote is really in the source. Guesses ("likely", "may") and anything unconfirmed are left out and listed under Open questions; a near-match can never flip a "never" or a "not", and spin-off media (novels, comics, games) is never used as evidence. Sources are shown with links. Set a version (for example Twelfth Doctor) for characters with several versions.
+- **Add your own sources.** Paste lore from any page you can read, such as a fan wiki; it is checked the same way. VoiceVault doesn't fetch fan wikis itself, because Fandom's terms don't allow automated access.
+- **Original characters from an idea.** Describe a character and Craft with AI writes the full persona and a voice description.
+- **Voice auditions.** Maya1 designs three voices from the description, and Whisper listens to each take so garbled or rambling ones are flagged and the best match is marked. The one you pick is saved to your voices with its exact transcript, and Drama 3 performs it in chats.
+- **Craft personas for all** builds every favourite in one go, saved as drafts to review. Every save keeps the previous version, and History restores it.
+
+### Converse
+- **Your personas.** Choose who you play in each chat or scene (name, avatar, description, how characters address you), or set a default. Characters respond to your persona, and your avatar shows next to your messages.
+- **Your Cast comes first** in the character picker. Load from Cast and Save to Cast work in chats and scenes.
+
+### Updates
+- **VoiceVault tells you when a new version is out.** Once a day it asks GitHub for the newest release. A banner shows what's new and offers to download the installer inside the app, then checks the file against GitHub's SHA-256 fingerprint. The desktop app checks it again just before running it. Install now closes VoiceVault and runs the installer, which keeps your library, voices, chats and settings. Skip this version, or turn the check off in Settings → General → Updates. Only the "what's the newest release?" question goes to GitHub; nothing about you is sent.
+
+### For agents
+- New MCP tools: `vv_cast_list`, `vv_cast_get`, `vv_cast_research`, `vv_cast_craft`, `vv_cast_save`, `vv_persona_list` and `vv_persona_save`. An agent can now craft personas for all your favourites, make original characters, or create personas. Like every VoiceVault tool, none of them can delete anything.
+
 ## 0.1.1 — 2026-11-05
 
 Fixes found while making VoiceVault's own release trailer, made entirely with VoiceVault. Watch it from the README.

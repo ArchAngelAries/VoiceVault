@@ -61,6 +61,16 @@ Replace `<VoiceVault folder>` with the install folder; use forward slashes, or d
 | `vv_music_compose` | New take with YuE2 or ACE-Step → `job_id` | adds a take |
 | `vv_music_analyze` | Tempo, key, beats per bar, style tags of a take → `job_id` | adds analysis to the take |
 | `vv_job_status` | Progress or result of a music job | no |
+| `vv_chat_list` | Saved chats and scenes, optionally searched | no |
+| `vv_memory_recall` | Search what chats remember (messages, summaries, facts) | no |
+| `vv_memory_remember` | Save a lasting memory about the user, a character or a chat | adds a memory |
+| `vv_cast_list` | The Cast, plus favourite characters that have no persona yet | no |
+| `vv_cast_get` | One cast member: persona, voice, sources, open questions | no |
+| `vv_cast_research` | Wikipedia excerpts for an established character, or article choices when the name is ambiguous | no |
+| `vv_cast_craft` | Build a persona with the user's chat model and save it as a draft: lore-checked for established characters, from an `idea` for original ones (a few minutes) | saves a draft; the previous version is kept |
+| `vv_cast_save` | Write persona fields yourself; only the fields you pass change | saves a draft; the previous version is kept |
+| `vv_persona_list` | The user's role-play personas and the default one | no |
+| `vv_persona_save` | Create or update a persona; optionally make it the default | adds or edits a persona |
 
 The tool annotations mark which tools are read-only (`readOnlyHint`); none is marked destructive.
 
@@ -82,6 +92,21 @@ The tool annotations mark which tools are read-only (`readOnlyHint`); none is ma
 2. `vv_voice_shape` with the preset and a `voice`.
 3. The user listens to the preview.
 4. `vv_voice_save` with `save_as: voice` makes it available for cloning.
+
+**"Craft personas for my favourite characters"**
+1. `vv_cast_list`. Everyone under `favourites_not_in_cast` needs a persona.
+2. `vv_cast_craft` with `character` set to each name, one at a time. A favourite is added to the Cast automatically.
+3. If a result has `choices` (for example "The Doctor" matches many articles), call again with `article` set to the right title, or with `version` (for example "Twelfth Doctor").
+4. Tell the user the personas are saved as drafts in Cast, and pass on any `unconfirmed` items.
+
+**Writing a persona yourself (agents with their own research)**
+- `vv_cast_research` gives sourced Wikipedia excerpts.
+- `vv_cast_save` stores your text. For an established character, include only facts you confirmed in a source. Pass those sources in `sources_json`, and put anything uncertain in `open_questions`. Never present guesses as lore.
+- Voices are designed from a description, never copied from an actor. The user auditions them on the Cast page.
+
+**"Make me a character" or "make me a persona"**
+- `vv_cast_craft` with `kind: original`, the name and an `idea`.
+- `vv_persona_save` for who the user plays: name, address, description, notes, optionally `make_default`.
 
 **Organise**
 - `vv_library_search` to find items.

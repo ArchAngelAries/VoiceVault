@@ -73,6 +73,7 @@ DEFAULTS: dict[str, Any] = {
     "theme":            "dark",
     "language":         "en",
     "experimental_features": False,  # shows Train in the sidebar
+    "update_check":     True,   # once a day, ask GitHub for the newest release (nothing about the user is sent)
 }
 
 

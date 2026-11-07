@@ -53,3 +53,17 @@ test('the audit finds personal strings but tolerates upstream build paths in ups
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('every backend code folder is packaged', () => {
+  const { BACKEND_DIRS } = require('./stage-resources.cjs')
+  const fs = require('node:fs')
+  const path = require('node:path')
+  const backend = path.join(__dirname, '..', '..', 'backend')
+  const skip = new Set(['tests', 'data', '__pycache__', '.pytest_cache'])
+  const codeDirs = fs.readdirSync(backend, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && !skip.has(entry.name) && !entry.name.startsWith('.'))
+    .filter(entry => fs.readdirSync(path.join(backend, entry.name)).some(name => name.endsWith('.py')))
+    .map(entry => entry.name)
+  const missing = codeDirs.filter(name => !BACKEND_DIRS.includes(name))
+  assert.deepEqual(missing, [], `Add these backend folders to BACKEND_DIRS in stage-resources.cjs: ${missing.join(', ')}`)
+})

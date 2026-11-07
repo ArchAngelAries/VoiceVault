@@ -31,7 +31,7 @@ import urllib.request
 from typing import Any, Callable
 
 PROTOCOL = "2025-06-18"
-SERVER = {"name": "voicevault", "version": "0.1.1"}
+SERVER = {"name": "voicevault", "version": "0.2.0"}
 BASE = os.environ.get("VOICEVAULT_URL", "http://127.0.0.1:7763").rstrip("/")
 PATH_KEYS = {"path", "paths", "root", "roots", "runtime", "file_path", "folder", "source_path", "original_file",
              "preview_file", "dir"}
@@ -615,6 +615,286 @@ def vv_memory_remember(a):
             return {"saved": False, "note": "Already remembered."}
         raise
     return {"saved": True, "memory_id": r.get("id"), "scope": r.get("scope"), "text": r.get("text")}
+
+
+# ── Cast and personas ───────────────────────────────────────────────────────
+
+PERSONA_TEXT = ("description", "personality", "speaking_style", "background", "relationships", "boundaries",
+                "example_lines", "voice_description")
+CAST_SAVE_RULE = ("For an established character, include only facts you have confirmed in a source, and pass those "
+                  "sources in sources_json; put anything you are not sure of in open_questions instead. ")
+
+
+def _cast() -> list[dict]:
+    return api("GET", "/api/cast").get("cast", [])
+
+
+def _cast_label(m: dict) -> str:
+    name = (m.get("profile") or {}).get("name") or "Unnamed"
+    return f"{name} ({m['variant']})" if m.get("variant") else name
+
+
+def _find_cast(name: str) -> dict:
+    return resolve(name, _cast(), _cast_label, lambda m: m["id"], "cast member")
+
+
+def _cast_summary(m: dict) -> dict:
+    p = m.get("profile") or {}
+    return {"cast": _cast_label(m), "cast_id": m["id"], "kind": m.get("kind"), "review": m.get("review_state"),
+            "has_persona": any(p.get(k) for k in ("personality", "speaking_style", "background")),
+            "has_voice": bool((p.get("voice_settings") or {}).get("model_id")),
+            "has_portrait": bool(p.get("portrait_override_url") or p.get("image_url")),
+            "sources": len(m.get("sources") or []), "open_questions": len(m.get("open_questions") or [])}
+
+
+def _cast_body(member: dict, profile: dict, **extra) -> dict:
+    keep = ("name", "description", "personality", "voice_description", "source_notes", "catalog_identity", "image_url",
+            "portrait_override_url", "voice_settings", "speaking_style", "background", "relationships", "boundaries",
+            "example_lines")
+    body = {"kind": member.get("kind") or "original", "variant": member.get("variant") or "",
+            "profile": {k: v for k, v in profile.items() if k in keep and v is not None},
+            "sources": member.get("sources") or [], "open_questions": member.get("open_questions") or [],
+            "review_state": member.get("review_state") or "draft", "note": ""}
+    body.update(extra)
+    return body
+
+
+LORE_FIELDS = ("description", "personality", "speaking_style", "background", "relationships", "boundaries",
+               "example_lines", "voice_description")
+
+
+def merge_draft(profile: dict, draft: dict) -> tuple[dict, list[str]]:
+    """Apply a crafted draft (same rule as the Cast page's mergeDraft).
+
+    Established characters: every lore field is replaced by the checked draft, even when empty, so
+    old unchecked text can't sit next to checked statements. Old text that differs is listed as an
+    open question (the full version stays in the cast member's history). Original characters: only
+    filled draft fields are applied. The existing name, portrait and voice are always kept.
+    """
+    new = draft.get("profile") or {}
+    merged, questions = dict(profile), []
+    if draft.get("kind") == "established":
+        for k in LORE_FIELDS:
+            old, value = str(profile.get(k) or "").strip(), str(new.get(k) or "").strip()
+            merged[k] = value
+            if old and old != value:
+                questions.append(f"Previous unchecked {k.replace('_', ' ')} (see History): {old}"[:300])
+        merged["source_notes"] = new.get("source_notes") or ""
+    else:
+        for k, v in new.items():
+            if isinstance(v, str) and v.strip() and not (k == "name" and profile.get("name")):
+                merged[k] = v
+    return merged, questions
+
+
+def _chat_connection(model: str | None) -> dict:
+    conn = api("GET", "/api/converse/connection")
+    body = {"provider": conn["provider"], "base_url": conn.get("base_url")}
+    listed = api("POST", "/api/converse/models", body).get("models", [])
+    ids = [m if isinstance(m, str) else m.get("id") for m in listed]
+    ids = [i for i in ids if i and "embed" not in i.lower()]
+    if model:
+        if model not in ids:
+            raise ToolError(f"The chat service has no model '{model}'. Loaded models: {', '.join(ids) or 'none'}.")
+        return {**body, "model": model}
+    if not ids:
+        raise ToolError("No chat model is loaded in the user's chat service (for example LM Studio). "
+                        "Ask the user to load one, then try again.")
+    return {**body, "model": ids[0]}
+
+
+@tool("vv_cast_list", "List the Cast (reusable characters with persona, portrait and voice) and the user's "
+      "favourite characters that aren't in the Cast yet. Use it to find who needs a persona crafted.",
+      {"query": S("Optional words to filter by name.", maxLength=120)})
+def vv_cast_list(a):
+    members = api("GET", "/api/cast", params={"q": a.get("query")}).get("cast", [])
+    favourites = api("GET", "/api/cast/candidates").get("candidates", [])
+    return {"cast": [_cast_summary(m) for m in members],
+            "favourites_not_in_cast": [{"name": f["name"], "catalog_id": f["item_id"]} for f in favourites],
+            "next": "vv_cast_craft to build a lore-checked persona; vv_cast_get to read one."}
+
+
+@tool("vv_cast_get", "Read one cast member: full persona, sources (shortened) and open questions.",
+      {"cast": S("Cast member name or id.", maxLength=200)}, ["cast"])
+def vv_cast_get(a):
+    m = api("GET", f"/api/cast/{_find_cast(a['cast'])['id']}")
+    p = {k: v for k, v in (m.get("profile") or {}).items() if k not in ("voice_settings",)}
+    return {"cast_id": m["id"], "kind": m.get("kind"), "variant": m.get("variant"), "review": m.get("review_state"),
+            "profile": p, "voice": (m.get("profile") or {}).get("voice_settings"),
+            "open_questions": m.get("open_questions") or [],
+            "sources": [{"title": s["title"], "url": s["url"], "excerpt": (s.get("excerpt") or "")[:300]}
+                        for s in m.get("sources") or []]}
+
+
+@tool("vv_cast_research", "Look up an established character's Wikipedia article and return the most useful "
+      "excerpts (with links and licence), or a list of candidate articles when the name is ambiguous. "
+      "Read-only; use it when you want to write a persona yourself with vv_cast_save.",
+      {"name": S("Character name, e.g. 'Rick Sanchez'.", maxLength=120),
+       "version": S("Which version or incarnation, e.g. 'Twelfth Doctor'.", maxLength=200),
+       "franchise": S("Show, film, game or book series, e.g. 'Doctor Who'.", maxLength=200),
+       "article": S("Exact Wikipedia article title, when you already know it.", maxLength=300)}, ["name"])
+def vv_cast_research(a):
+    r = api("POST", "/api/cast/research", {"name": a["name"], "variant": a.get("version", ""),
+                                           "franchise": a.get("franchise", ""), "article_title": a.get("article")}, timeout=120)
+    if not r.get("article"):
+        return {"article": None, "choices": r.get("choices", []),
+                "next": "Call again with 'article' set to the right title, or add 'version'."}
+    return {"article": r["article"], "sources": r.get("sources", []),
+            "note": "Wikipedia text is CC BY-SA 4.0; keep the links when you save sources."}
+
+
+@tool("vv_cast_craft", "Have VoiceVault build a persona with the user's chat model and save it to the Cast as a draft "
+      "for the user to review. Established characters are researched on Wikipedia and every statement is checked "
+      "against a quoted source; unconfirmed things go to open questions. For an original character, give 'idea'. "
+      "Works on a cast member, a favourite that isn't in the Cast yet (it is added), or a new name. "
+      "Takes a few minutes on a local model. Never deletes; the previous version stays in the cast member's history.",
+      {"character": S("Cast member or favourite name (or a new name for an original character).", maxLength=200),
+       "kind": S("'established' (existing fictional character) or 'original' (new from an idea).", enum=["established", "original"]),
+       "version": S("Version or incarnation, e.g. 'Twelfth Doctor' or 'Rick C-137'.", maxLength=200),
+       "idea": S("For an original character: who they are.", maxLength=4000),
+       "direction": S("Optional extra direction, e.g. 'focus on series 9'.", maxLength=1000),
+       "article": S("Exact Wikipedia article title, if a previous call asked you to choose.", maxLength=300),
+       "model": S("Optional chat model id; defaults to the first loaded model.", maxLength=300)},
+      ["character"], read_only=False)
+def vv_cast_craft(a):
+    members = _cast()
+    member = None
+    try:
+        member = resolve(a["character"], members, _cast_label, lambda m: m["id"], "cast member") if members else None
+    except ToolError as exc:
+        if "matches" in str(exc):
+            raise
+    if member is None:
+        favourites = api("GET", "/api/cast/candidates").get("candidates", [])
+        fav = None
+        if favourites:
+            try:
+                fav = resolve(a["character"], favourites, lambda f: f["name"], lambda f: f["item_id"], "favourite")
+            except ToolError as exc:
+                if "matches" in str(exc):
+                    raise
+        if fav:
+            member = {"kind": "established", "variant": a.get("version", ""),
+                      "profile": {"name": fav["name"], "catalog_identity": fav["item_id"], "image_url": fav.get("image_url")}}
+        else:
+            kind = a.get("kind") or ("original" if a.get("idea") else "established")
+            member = {"kind": kind, "variant": a.get("version", ""), "profile": {"name": a["character"]}}
+    kind = a.get("kind") or member.get("kind") or "established"
+    if kind == "original" and not a.get("idea") and not member.get("id"):
+        raise ToolError("For an original character, describe them in 'idea'.")
+    profile = member.get("profile") or {}
+    body = {"connection": _chat_connection(a.get("model")), "mode": kind, "name": profile.get("name", ""),
+            "variant": a.get("version") or member.get("variant") or "", "catalog_identity": profile.get("catalog_identity"),
+            "source_notes": profile.get("source_notes", ""), "article_title": a.get("article"),
+            "idea": a.get("idea", ""), "creative_direction": a.get("direction", "")}
+    r = api("POST", "/api/cast/craft", body, timeout=1200)
+    if r.get("needs_choice"):
+        return {"saved": False, "choices": [{"title": c["title"], "snippet": c.get("snippet")} for c in r.get("choices", [])],
+                "next": "Call vv_cast_craft again with 'article' set to the right title (or set 'version')."}
+    draft = r["draft"]
+    merged, extra_questions = merge_draft(profile, draft)
+    out = _cast_body({**member, "kind": kind, "variant": body["variant"] or draft.get("variant", "")}, merged,
+                     sources=(draft.get("sources") or []) if kind == "established" else (member.get("sources") or []),
+                     open_questions=((draft.get("open_questions") or []) + extra_questions)[:20],
+                     review_state="draft", note="Crafted by an agent")
+    saved = api("PUT", f"/api/cast/{member['id']}", out) if member.get("id") else api("POST", "/api/cast", out)
+    report = r.get("report") or {}
+    return {"saved": True, **_cast_summary(saved), "article": (r.get("article") or {}).get("title"),
+            "statements_kept": report.get("claims_kept", 0) + report.get("leads_confirmed", 0),
+            "statements_removed": len(report.get("claims_removed", [])),
+            "unconfirmed": report.get("leads_unconfirmed", []),
+            "next": "Tell the user it's saved as a draft in Cast for them to review."}
+
+
+@tool("vv_cast_save", "Create or update a cast member with persona text you wrote. Only the fields you pass change. "
+      + CAST_SAVE_RULE + "Never deletes; the previous version stays in its history.",
+      {"character": S("Existing cast member name or id, or a new character's name.", maxLength=200),
+       "kind": S("'established' or 'original' (for a new character).", enum=["established", "original"]),
+       "version": S("Version or incarnation.", maxLength=200),
+       **{k: S(k.replace("_", " ").capitalize() + ".", maxLength=4000) for k in PERSONA_TEXT},
+       "notes": S("Notes, including what is uncertain.", maxLength=4000),
+       "portrait_url": S("Optional http(s) image link for the portrait.", maxLength=2048),
+       "sources_json": S('Optional JSON list: [{"title": "...", "url": "https://...", "licence": "...", "excerpt": "..."}].', maxLength=60000),
+       "open_questions": A("Things you could not confirm.")},
+      ["character"], read_only=False)
+def vv_cast_save(a):
+    members = _cast()
+    member = None
+    if members:
+        try:
+            member = resolve(a["character"], members, _cast_label, lambda m: m["id"], "cast member")
+        except ToolError as exc:
+            if "matches" in str(exc):
+                raise
+    if member:
+        member = api("GET", f"/api/cast/{member['id']}")
+    else:
+        member = {"kind": a.get("kind") or "original", "variant": "", "profile": {"name": a["character"]}}
+    profile = dict(member.get("profile") or {})
+    for k in PERSONA_TEXT:
+        if a.get(k):
+            profile[k] = a[k]
+    if a.get("notes"):
+        profile["source_notes"] = a["notes"]
+    if a.get("portrait_url"):
+        profile["portrait_override_url"] = a["portrait_url"]
+    extra = {"note": "Saved by an agent", "review_state": "draft"}
+    if a.get("kind"):
+        extra["kind"] = a["kind"]
+    if a.get("version"):
+        extra["variant"] = a["version"]
+    if a.get("sources_json"):
+        try:
+            sources = json.loads(a["sources_json"])
+            assert isinstance(sources, list)
+        except (ValueError, AssertionError):
+            raise ToolError("'sources_json' must be a JSON list of {title, url, licence, excerpt} objects.")
+        extra["sources"] = [{"title": str(s.get("title", ""))[:300], "url": str(s.get("url", "")),
+                             "licence": str(s.get("licence", ""))[:120], "excerpt": str(s.get("excerpt", ""))[:4000]}
+                            for s in sources if isinstance(s, dict)][:30]
+    if a.get("open_questions"):
+        extra["open_questions"] = [q[:300] for q in a["open_questions"]][:20]
+    body = _cast_body(member, profile, **extra)
+    saved = api("PUT", f"/api/cast/{member['id']}", body) if member.get("id") else api("POST", "/api/cast", body)
+    return {"saved": True, **_cast_summary(saved)}
+
+
+@tool("vv_persona_list", "List the user's role-play personas (who the user plays in chats) and the default one.")
+def vv_persona_list(_):
+    r = api("GET", "/api/personas")
+    return {"personas": [{"persona": p["name"], "persona_id": p["id"], "address": p.get("address"),
+                          "default": p["id"] == r.get("default_id")} for p in r.get("personas", [])]}
+
+
+@tool("vv_persona_save", "Create or update one of the user's role-play personas. Only the fields you pass change. "
+      "Never deletes.",
+      {"persona": S("Existing persona name or id, or a new name.", maxLength=120),
+       "address": S("How characters should address them (title, nickname, pronouns).", maxLength=200),
+       "description": S("Who they are in the story.", maxLength=4000),
+       "personality": S("How they act.", maxLength=2000),
+       "notes": S("What characters know about them.", maxLength=2000),
+       "avatar_url": S("Optional http(s) image link for the avatar.", maxLength=2048),
+       "make_default": B("Use it by default in new character chats.")},
+      ["persona"], read_only=False)
+def vv_persona_save(a):
+    personas = api("GET", "/api/personas").get("personas", [])
+    current = None
+    if personas:
+        try:
+            current = resolve(a["persona"], personas, lambda p: p["name"], lambda p: p["id"], "persona")
+        except ToolError as exc:
+            if "matches" in str(exc):
+                raise
+    body = {k: (current or {}).get(k, "") for k in ("name", "address", "description", "personality", "notes")}
+    body["avatar_url"] = (current or {}).get("avatar_url")
+    body["name"] = body["name"] or a["persona"]
+    for k in ("address", "description", "personality", "notes", "avatar_url"):
+        if a.get(k):
+            body[k] = a[k]
+    saved = api("PUT", f"/api/personas/{current['id']}", body) if current else api("POST", "/api/personas", body)
+    if a.get("make_default"):
+        api("PUT", "/api/personas/default", {"id": saved["id"]})
+    return {"saved": True, "persona": saved["name"], "persona_id": saved["id"], "default": bool(a.get("make_default"))}
 
 
 # ── MCP plumbing (JSON-RPC 2.0 over stdio, one message per line) ────────────

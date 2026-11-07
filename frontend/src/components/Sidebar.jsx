@@ -3,7 +3,7 @@
  */
 import React, { useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Compass, Scissors, Brain, Sparkles, MessageSquare, Music2, SlidersHorizontal, Library, FolderOpen, Settings, Wifi, WifiOff, CircleHelp, Heart, Coffee } from 'lucide-react'
+import { Compass, Scissors, Brain, Sparkles, MessageSquare, Music2, SlidersHorizontal, Library, FolderOpen, Settings, Wifi, WifiOff, CircleHelp, Heart, Coffee, Users } from 'lucide-react'
 import { useSystemStore } from '@/stores/systemStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useShallow } from 'zustand/react/shallow'
@@ -28,6 +28,7 @@ export const NAV_GROUPS = [
   ] },
   { title: 'Characters', items: [
     { path: '/discover',    icon: Compass,     label: 'Discover'  },
+    { path: '/cast',        icon: Users,       label: 'Cast'      },
     { path: '/collections', icon: Library,     label: 'Collections', match: ['/organize', '/tiers'] },
   ] },
   { title: 'Library', items: [

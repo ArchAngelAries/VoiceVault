@@ -5,6 +5,7 @@ import React, { Suspense, lazy, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar     from '@/components/Sidebar'
 import HardwareBar from '@/components/HardwareBar'
+import UpdateBanner from '@/components/common/UpdateBanner'
 import Generate    from '@/pages/Generate'
 import Converse    from '@/pages/Converse'
 
@@ -18,6 +19,7 @@ const VoiceLab    = lazy(() => import('@/pages/VoiceLab'))
 const LibraryPage = lazy(() => import('@/pages/Library'))
 const Collections = lazy(() => import('@/pages/Collections'))   // Collections · Favorites · Tier lists
 const Settings    = lazy(() => import('@/pages/Settings'))
+const Cast        = lazy(() => import('@/pages/Cast'))
 const Help        = lazy(() => import('@/pages/Help'))
 
 function PageLoading() {
@@ -55,6 +57,7 @@ export default function App() {
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <HardwareBar />
+        <UpdateBanner />
         {favoriteError && <div role="alert" className="flex shrink-0 items-center gap-3 border-b border-red-900/50 bg-red-950/40 px-4 py-2 text-xs text-red-300">
           <span className="flex-1">{favoriteError.message} {favoriteError.item?.title || favoriteError.item?.name || ''}</span>
           <button type="button" onClick={retryFavorite} disabled={favoritePending.has(favoriteError.item?.id)}
@@ -73,6 +76,7 @@ export default function App() {
             <Route path="/music"     element={<Music />} />
             <Route path="/voice-lab" element={<VoiceLab />} />
             <Route path="/library" element={<LibraryPage />} />
+            <Route path="/cast"      element={<Cast />} />
             <Route path="/collections" element={<Collections />} />
             <Route path="/collections/favorites" element={<Collections />} />
             <Route path="/organize"  element={<Navigate to="/collections" replace />} />

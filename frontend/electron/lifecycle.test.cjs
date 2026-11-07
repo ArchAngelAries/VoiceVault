@@ -22,7 +22,7 @@ test('Python selection uses the project venv by default and honors an explicit o
 })
 
 test('health identity accepts only the VoiceVault API response', () => {
-  assert.equal(isVoiceVaultHealth({ status: 'ok', service: 'voicevault-api', version: '0.1.1' }), true)
+  assert.equal(isVoiceVaultHealth({ status: 'ok', service: 'voicevault-api', version: require('../package.json').version }), true)
   assert.equal(isVoiceVaultHealth({ status: 'ok', service: 'other-api', version: '0.1.1' }), false)
   assert.equal(isVoiceVaultHealth({ status: 'ok', service: 'voicevault-api', version: 'other' }), false)
 })

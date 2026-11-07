@@ -12,6 +12,7 @@ module.exports = {
     'electron/packaging.cjs',
     'electron/runtime-config.cjs',
     'electron/bootstrap.cjs',
+    'electron/update-install.cjs',
     'electron/icons/**/*',
     'dist/**/*',
     'package.json',

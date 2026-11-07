@@ -2,10 +2,11 @@
  * components/discover/CharacterCard.jsx — Character card in detail modal
  */
 import React, { useState } from 'react'
-import { User, Mic, Plus, BookmarkPlus, MessageSquare } from 'lucide-react'
+import { User, Mic, Plus, BookmarkPlus, MessageSquare, UserPlus, Loader2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { characterChatProfile } from '@/lib/characterChatProfile'
 import HeartButton from './HeartButton'
+import { createCastMember } from '@/api/cast'
 import AddToCollectionModal from './AddToCollectionModal'
 
 // Typed item IDs look like "character:source:id". The backend also sends `source`.
@@ -16,6 +17,16 @@ function sourceFromId(id) {
 
 export default function CharacterCard({ character, onHarvest, onClick }) {
   const navigate = useNavigate()
+  const [addingToCast, setAddingToCast] = useState(false)
+  const addToCast = async e => {
+    e.stopPropagation()
+    setAddingToCast(true)
+    try {
+      const saved = await createCastMember({ kind: 'established', variant: '', profile: characterChatProfile(character),
+        sources: [], open_questions: [], review_state: 'draft' })
+      navigate(`/cast?id=${encodeURIComponent(saved.id)}`)
+    } catch { setAddingToCast(false) }
+  }
   const [imgErr, setImgErr]   = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const isWikidata = character.source === 'wikidata' || String(character.id || '').startsWith('character:wikidata:')
@@ -89,6 +100,11 @@ export default function CharacterCard({ character, onHarvest, onClick }) {
             title={`Chat with ${character.name || 'this character'}`} aria-label={`Chat with ${character.name || 'this character'}`}
             className="w-7 h-7 rounded-lg border border-vault-border flex items-center justify-center text-vault-muted hover:text-vault-accent hover:border-vault-accent transition-colors">
             <MessageSquare size={13} />
+          </button>
+          <button onClick={addToCast} disabled={addingToCast}
+            title={`Add ${character.name || 'this character'} to your Cast`} aria-label={`Add ${character.name || 'this character'} to your Cast`}
+            className="w-7 h-7 rounded-lg border border-vault-border flex items-center justify-center text-vault-muted hover:text-vault-accent hover:border-vault-accent transition-colors disabled:opacity-50">
+            {addingToCast ? <Loader2 size={13} className="animate-spin" /> : <UserPlus size={13} />}
           </button>
           <HeartButton item={itemShape} size={13}
             className="w-7 h-7 rounded-lg border border-vault-border hover:border-vault-accent/50" />

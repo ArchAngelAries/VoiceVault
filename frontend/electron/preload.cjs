@@ -20,5 +20,6 @@ contextBridge.exposeInMainWorld('vault', {
   repairInstallation: () => ipcRenderer.invoke('repair-installation'),
   openLogFolder: () => ipcRenderer.invoke('open-log-folder'),
   saveRuntimeConfiguration: paths => ipcRenderer.invoke('save-runtime-configuration', paths),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
   onMenuAction: (cb) => ipcRenderer.on('menu-action', (_, action) => cb(action)),
 })

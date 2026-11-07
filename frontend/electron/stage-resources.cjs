@@ -13,7 +13,7 @@ const path = require('node:path')
 const REPO = path.resolve(__dirname, '../..')
 const STAGE = path.resolve(__dirname, '../release-staging')
 
-const BACKEND_DIRS = ['api', 'asr', 'core', 'db', 'engines', 'gpu', 'harvest', 'llm', 'models', 'music', 'rag', 'tools', 'training', 'utils', 'voice']
+const BACKEND_DIRS = ['api', 'asr', 'core', 'db', 'engines', 'gpu', 'harvest', 'llm', 'lore', 'models', 'music', 'rag', 'tools', 'training', 'utils', 'voice']
 const BACKEND_FILES = ['main.py', 'mcp_server.py', 'requirements.txt', 'requirements-tts.txt', 'requirements-lock.txt', 'voicevault_settings.example.json']
 const COPIES = [
   ...BACKEND_DIRS.map(name => ({ from: `backend/${name}`, filter: 'backend' })),
@@ -152,4 +152,4 @@ function main() {
 
 if (require.main === module) main()
 
-module.exports = { COPIES, isExcluded, isExcludedBackendCode, isUpstreamBinary, stage, audit, auditPatterns }
+module.exports = { BACKEND_DIRS, COPIES, isExcluded, isExcludedBackendCode, isUpstreamBinary, stage, audit, auditPatterns }

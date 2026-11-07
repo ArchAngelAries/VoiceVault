@@ -27,10 +27,12 @@ VoiceVault runs AI voice, music and chat models on your own PC. Your audio, voic
 - **Voice Lab** — change a voice's age, pitch, gender and speed, add effects, or re-voice your own performance as another voice ("voice to voice").
 - **Harvest** — get a clean voice clip from a file or a public link. Remove music, isolate one speaker, remove noise and restore quality, then save it as a voice to clone.
 - **Music Studio** — write full songs from lyrics and a style, edit parts of a song, split it into stems, analyse tempo and key, and make **sound effects** from a text description. Every edit makes a new take, so nothing is lost.
-- **Converse and Scene Creation** — chat with AI characters, one-on-one or up to six at once, each speaking in their own voice. **Long-term memory** keeps long chats coherent, even with small local models.
+- **Converse and Scene Creation** — chat with AI characters, one-on-one or up to six at once, each speaking in their own voice. **Long-term memory** keeps long chats coherent, even with small local models. Pick **who you play** with your own personas and avatars.
+- **Cast** — set a character up once (portrait, persona, voice) and use them in any chat or scene. **Craft with AI** builds a lore-accurate persona for an established character from their Wikipedia article: every statement is checked against an exact quote, and anything unconfirmed is listed for you instead of being used. Or describe an idea and get an original character. **Voice auditions** design a voice to match, and Whisper flags garbled takes.
 - **Discover, Organize, Tier lists** — find shows, films, games and characters, save them, and rank them.
 - **Library** — every piece of audio in one searchable list.
-- **AI-agent tools** — let an AI agent (a local model in LM Studio, Claude Desktop or any MCP client) speak lines, reshape voices and compose music through VoiceVault. Agents can't delete or overwrite anything. See [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md).
+- **Updates** — VoiceVault tells you when a new version is out, then downloads and installs it from inside the app when you click.
+- **AI-agent tools** — let an AI agent (a local model in LM Studio, Claude Desktop or any MCP client) speak lines, reshape voices, compose music and craft cast personas through VoiceVault. Agents can't delete or overwrite anything. See [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md).
 
 Built-in guides explain every page: press **Guide** at the top right of any page, or open **Help**.
 
@@ -38,14 +40,18 @@ Built-in guides explain every page: press **Guide** at the top right of any page
 
 | | |
 |---|---|
-| ![Chat with a character who speaks in their own voice](docs/screenshots/converse.jpg) | ![Generate speech in a saved voice with Fish Audio Drama 3](docs/screenshots/generate.jpg) |
-| **Converse:** chat with characters that remember, and hear every reply. | **Generate:** type a line, pick a voice, press Generate. |
-| ![Voice Lab with age, pitch, gender and effect presets](docs/screenshots/voicelab.jpg) | ![Music Studio with a song's waveform, style builder and lyrics](docs/screenshots/music.jpg) |
-| **Voice Lab:** reshape a voice or turn it into a robot, a ghost or a giant. | **Music Studio:** compose songs from lyrics and a style, then measure and remix them. |
-| ![Discover: browse anime, films, TV, games and characters](docs/screenshots/discover.jpg) | ![Library: every voice, generation and song in one list](docs/screenshots/library.jpg) |
-| **Discover:** browse and favourite shows, films, games and characters. | **Library:** every piece of audio, searchable and labelled. |
-| ![Settings: download models and see each licence](docs/screenshots/settings-models.jpg) | ![Harvest: four steps from a recording to a clean voice](docs/screenshots/harvest.jpg) |
-| **Models:** one-click downloads from official sources, with each licence shown. | **Harvest:** turn a recording into a clean voice to clone, in four steps. |
+| ![Cast: a character with a lore-checked persona, sources and a voice](docs/screenshots/cast.jpg) | ![Converse: chatting as your own persona, with avatars on both sides](docs/screenshots/converse.jpg) |
+| **Cast:** a persona built from sources, each statement checked, with its voice auditioned. | **Converse:** chat as your own persona; characters remember, and every reply is spoken. |
+| ![Craft with AI: research and check a persona](docs/screenshots/cast-craft.jpg) | ![Sources, open questions and the auditioned voice of a cast member](docs/screenshots/cast-sources.jpg) |
+| **Craft with AI:** reads the character's Wikipedia article, then checks every statement against a quote. | **Checked, not guessed:** sources with links; guesses go to Open questions; the voice was auditioned and Whisper-checked. |
+| ![Generate speech in a saved voice with Fish Audio Drama 3](docs/screenshots/generate.jpg) | ![Voice Lab with age, pitch, gender and effect presets](docs/screenshots/voicelab.jpg) |
+| **Generate:** type a line, pick a voice, press Generate. | **Voice Lab:** reshape a voice or turn it into a robot, a ghost or a giant. |
+| ![Music Studio with a song's waveform, style builder and lyrics](docs/screenshots/music.jpg) | ![Discover: browse anime, films, TV, games and characters](docs/screenshots/discover.jpg) |
+| **Music Studio:** compose songs from lyrics and a style, then measure and remix them. | **Discover:** browse and favourite shows, films, games and characters. |
+| ![Library: every voice, generation and song in one list](docs/screenshots/library.jpg) | ![Settings: download models and see each licence](docs/screenshots/settings-models.jpg) |
+| **Library:** every piece of audio, searchable and labelled. | **Models:** one-click downloads from official sources, with each licence shown. |
+| ![Harvest: four steps from a recording to a clean voice](docs/screenshots/harvest.jpg) | |
+| **Harvest:** turn a recording into a clean voice to clone, in four steps. | |
 
 **Themes:** nine colour themes, including Daylight (light), Ocean and Pride.
 
@@ -53,7 +59,7 @@ Built-in guides explain every page: press **Guide** at the top right of any page
 |---|---|---|
 | ![Pride theme](docs/screenshots/theme-pride.jpg) | ![Daylight theme](docs/screenshots/theme-daylight.jpg) | ![Ocean theme](docs/screenshots/theme-ocean.jpg) |
 
-*Every voice in these screenshots is synthetic: designed from a text description in VoiceVault, not cloned from a real person. The characters, chats and songs are original demo content. Show and game titles and artwork come from TMDB, IGDB and AniList and belong to their owners.*
+*Every voice in these screenshots is synthetic: designed from a text description in VoiceVault, not cloned from a real person. Levi's voice was designed by Maya1 from his persona, not taken from the anime. The other characters, chats and songs are original demo content. Levi's persona was crafted from his Wikipedia article (CC BY-SA 4.0). Show and game titles, characters and artwork come from TMDB, IGDB and AniList and belong to their owners.*
 
 ## Requirements
 
@@ -120,6 +126,7 @@ How to get each key, step by step: **[docs/API_KEYS.md](docs/API_KEYS.md)**.
 - **Everything is local.** Audio, voices, chats and settings stay on your PC.
 - **Cloud features only when you add a key.** Data goes to an online service only when you use a feature that needs it (for example Claude chat or the Fish Audio cloud voice), and then straight to that service.
 - The app's backend only answers requests from your own PC.
+- **Update check.** Once a day VoiceVault asks GitHub whether a newer release exists. Only that question is sent, nothing about you or your PC. Turn it off in Settings → General → Updates. Updates are downloaded and installed only when you click, and the download is checked against GitHub's SHA-256 fingerprint first.
 
 ## Models and licences
 
@@ -143,6 +150,7 @@ VoiceVault is a tool. You are responsible for what you create with it and must f
 - [docs/HARDWARE_MATRIX.md](docs/HARDWARE_MATRIX.md) — measured speed on different graphics cards and CPU-only
 - [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — connecting AI agents (MCP)
 - [docs/CHAT_MEMORY.md](docs/CHAT_MEMORY.md) — how long-term chat memory works
+- [docs/CAST.md](docs/CAST.md) — the Cast, Craft with AI and how personas are checked
 - [docs/VOICE_LAB.md](docs/VOICE_LAB.md), [docs/HARVEST_CLEANING.md](docs/HARVEST_CLEANING.md), [docs/MUSIC_STUDIO.md](docs/MUSIC_STUDIO.md) — feature details
 
 ## Support VoiceVault

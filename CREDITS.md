@@ -45,6 +45,8 @@ Discover's shows, films, people, games and characters come from:
 - **AniList**.
 - **Wikidata**.
 
+Cast's Craft with AI reads character articles from **Wikipedia**, whose text is available under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Each excerpt is kept with a link to its article.
+
 Titles, names and images belong to their owners. VoiceVault only displays them for browsing and organising, and claims no affiliation.
 
 ## People

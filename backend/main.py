@@ -23,6 +23,7 @@ from api.tiers       import router as tiers_router
 from api.tts         import router as tts_router, start_background_discovery
 from api.asr         import router as asr_router
 from api.converse    import router as converse_router
+from api.cast        import router as cast_router, personas_router
 from api.harvest     import router as harvest_router, startup_harvest_jobs, shutdown_harvest_jobs
 from api.train       import router as train_router, shutdown_training_jobs
 from api.music       import router as music_router, shutdown_music
@@ -30,6 +31,8 @@ from api.voice       import router as voice_router
 from api.library import router as library_router
 from api.models_manager import router as models_router
 from api.jobs import router as jobs_router
+from api.updates import router as updates_router
+from core.version import APP_VERSION
 from db.client       import ensure_defaults, disconnect, get_db
 from db.migrate      import run_pending
 from core.paths      import backup_dir, database_path, STATE_DIR
@@ -78,7 +81,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="VoiceVault API",
     description="VoiceVault local backend — voice harvesting, TTS, training, and AI chat",
-    version="0.1.1",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -123,6 +126,8 @@ app.include_router(tiers_router,        prefix="/api/tiers",        tags=["tiers
 app.include_router(tts_router,          prefix="/api/tts",          tags=["tts"])
 app.include_router(asr_router,          prefix="/api/asr",          tags=["asr"])
 app.include_router(converse_router,     prefix="/api/converse",     tags=["converse"])
+app.include_router(cast_router,         prefix="/api/cast",         tags=["cast"])
+app.include_router(personas_router,     prefix="/api/personas",     tags=["personas"])
 app.include_router(harvest_router,      prefix="/api/harvest",      tags=["harvest"])
 app.include_router(train_router,        prefix="/api/train",        tags=["train"])
 app.include_router(music_router,        prefix="/api/music",        tags=["music"])
@@ -130,6 +135,7 @@ app.include_router(voice_router,        prefix="/api/voice",        tags=["voice
 app.include_router(library_router,      prefix="/api/library",      tags=["library"])
 app.include_router(models_router,       prefix="/api/models",       tags=["models"])
 app.include_router(jobs_router,         prefix="/api/jobs",         tags=["jobs"])
+app.include_router(updates_router,      prefix="/api/updates",      tags=["updates"])
 
 
 if __name__ == "__main__":

@@ -19,8 +19,8 @@ from core.discovery_retention import get_snapshot_store
 
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-PACING_SECONDS = {"anilist": 2.0, "igdb": 0.3, "tmdb": 0.1, "wikidata": 0.5}
-_TIMEOUT_SECONDS = {"anilist": 15.0, "igdb": 20.0, "tmdb": 15.0, "wikidata": 15.0}
+PACING_SECONDS = {"anilist": 2.0, "igdb": 0.3, "tmdb": 0.1, "wikidata": 0.5, "wikipedia": 0.5}
+_TIMEOUT_SECONDS = {"anilist": 15.0, "igdb": 20.0, "tmdb": 15.0, "wikidata": 15.0, "wikipedia": 20.0}
 _client_factory = None
 _clock = time.time
 _sleep = asyncio.sleep

@@ -13,10 +13,13 @@ function resolvePythonExecutable(projectRoot, env = process.env, existsSync = fs
   return executable
 }
 
-function isVoiceVaultHealth(payload) {
+// The backend must be the same release as this desktop app (its version comes from package.json).
+const APP_VERSION = require('../package.json').version
+
+function isVoiceVaultHealth(payload, expectedVersion = APP_VERSION) {
   return payload?.status === 'ok'
     && payload?.service === 'voicevault-api'
-    && payload?.version === '0.1.1'
+    && payload?.version === expectedVersion
 }
 
 function electronNodeEnvironment(env = process.env) {

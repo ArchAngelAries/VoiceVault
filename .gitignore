@@ -9,6 +9,8 @@ backend/db/*.db
 backend/db/*.corrupt-*
 backend/data/
 data/
+# ...but the app's own source data (page guides, themes, presets) is code and must be published.
+!frontend/src/data/
 Library/
 .env
 *.env

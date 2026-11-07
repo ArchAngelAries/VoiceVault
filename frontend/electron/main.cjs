@@ -11,6 +11,7 @@ const {
   backendPort,
 } = require('./packaging.cjs')
 const bootstrap = require('./bootstrap.cjs')
+const { verifyInstaller } = require('./update-install.cjs')
 const {
   readRuntimeConfiguration,
   effectiveRuntimeEnvironment,
@@ -381,6 +382,29 @@ function isStartupSender(event) {
     && mainWindow.webContents.getURL() === startupUrl)
 }
 
+function isAppSender(event) {
+  return Boolean(mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents
+    && event.senderFrame === mainWindow.webContents.mainFrame)
+}
+
+// "Install now": re-check the downloaded installer here, start it, and close VoiceVault so it can update.
+async function installUpdate(event) {
+  if (!isAppSender(event)) return { error: 'Updates can only be installed from the VoiceVault window.' }
+  try {
+    const response = await fetch(`${backendUrl}/api/updates/installer`)
+    if (!response.ok) return { error: 'No verified update is ready. Download it again.' }
+    const file = await verifyInstaller(await response.json())
+    log(`Starting update installer ${path.basename(file)}`)
+    const child = spawn(file, [], { detached: true, stdio: 'ignore', windowsHide: false })
+    child.unref()
+    setTimeout(() => app.quit(), 500)
+    return { started: true }
+  } catch (error) {
+    log(`Update install refused: ${error.message}`)
+    return { error: error.message }
+  }
+}
+
 async function configureRuntime(event, input) {
   if (!isStartupSender(event) || isDev) return { error: 'Runtime paths can only be changed from packaged startup recovery.' }
   if (booting || closing) return { error: 'Wait for startup to finish before changing paths.' }
@@ -414,6 +438,7 @@ if (gotLock) {
     await shell.openPath(folder)
   })
   ipcMain.handle('save-runtime-configuration', configureRuntime)
+  ipcMain.handle('install-update', installUpdate)
   app.on('second-instance', () => {
     if (!mainWindow) createWindow().then(boot).catch(error => log(error.message))
     else {
