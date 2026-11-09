@@ -62,6 +62,7 @@ export const PAGE_GUIDES = {
       'The model guide under the model picker lists what the model understands: voice descriptions, emotion tags, languages.',
       'Same seed plus same settings gives the same result. Change the seed for a different take.',
       'Every result is saved in Library → Generations.',
+      'Pace sets the silence between sentences (Tight to Dramatic). Tags give exact control with every model: [pause 0.8s] for silence, [slow]…[/slow] and [fast]…[/fast], or [speed 0.7]…[/speed].',
     ],
     power: [
       'Generation settings: temperature (variety), top-p, repetition penalty and maximum length.',
@@ -78,7 +79,9 @@ export const PAGE_GUIDES = {
       'Type, or use the microphone, and press Send.',
       'Optional: pick a character (your Cast comes first) and choose who you play under “You’re playing”.',
     ],
-    tips: ['Replies are spoken by default when a voice is set. Mute stops it.'],
+    tips: ['Replies are spoken by default when a voice is set. Mute stops it.',
+      'Every spoken reply gets a Replay button, even after you switch chats. Older replies without audio offer Speak.',
+      'Pace between sentences (in the voice settings) adds breathing room to a character\'s speech.'],
     power: ['Delivery controls set emotion and style per character. "Speak while replying" starts audio before the reply is finished.',
       'Long chats stay coherent through Memory (the brain button). For smarter recall in LM Studio, also load an embedding model such as nomic-embed next to your chat model.'],
     next: [['/scene-creation', 'Several characters at once'], ['/discover', 'Find a character']],
@@ -118,6 +121,7 @@ export const PAGE_GUIDES = {
     tips: [
       'Saving as a voice and then generating with Drama 3 sounds more natural than heavy shaping alone.',
       'Voice to voice keeps your timing and emotion but uses another voice\'s sound. It takes about 5–7× the clip length.',
+      'Voice change strength and Effects strength dial a preset up or down: 0% is the original voice, 100% as set, 150% exaggerated. Each effect also has its own Amount under Advanced.',
     ],
     power: [
       'Advanced: formants, pitch range, breathiness, rasp and more, plus an editable effects chain.',

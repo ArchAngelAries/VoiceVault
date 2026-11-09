@@ -134,7 +134,27 @@ EFFECTS = {"reverb": reverb, "reverse_reverb": reverse_reverb, "echo": echo, "ch
            "noise": noise}
 
 
-def apply_chain(audio: np.ndarray, rate: int, chain: list[dict]) -> np.ndarray:
+# Effects whose extra length comes before the sound (a reverse reverb swells in ahead of the voice).
+LEAD_IN = {"reverse_reverb"}
+
+
+def _blend(dry: np.ndarray, wet: np.ndarray, amount: float, lead_in: bool = False) -> np.ndarray:
+    """dry + (wet - dry) * amount: 0 = no effect, 1 = as designed, above 1 = exaggerated.
+
+    Effects with tails (reverb, echo) are longer than their input, so the shorter side is padded at
+    the end; for lead-in effects the dry voice is padded at the start, so both stay in step.
+    """
+    n = max(len(dry), len(wet))
+    if lead_in and len(dry) < n:
+        dry = np.concatenate([np.zeros(n - len(dry), np.float32), dry])
+    d = np.pad(dry, (0, n - len(dry))) if len(dry) < n else dry
+    w = np.pad(wet, (0, n - len(wet))) if len(wet) < n else wet
+    return (d + (w - d) * amount).astype(np.float32)
+
+
+def apply_chain(audio: np.ndarray, rate: int, chain: list[dict], strength: float = 1.0) -> np.ndarray:
+    """Run the effects in order. Each step's "amount" (default 1) and the overall strength set how much
+    of it is heard: 0 = none, 1 = as designed, up to 2 = exaggerated."""
     out = np.asarray(audio, dtype=np.float32)
     for step in chain or []:
         kind = step.get("type")
@@ -142,8 +162,16 @@ def apply_chain(audio: np.ndarray, rate: int, chain: list[dict]) -> np.ndarray:
             raise ValueError(f"Unknown effect '{kind}'.")
         if step.get("enabled", True) is False:
             continue
-        params = {k: v for k, v in step.items() if k not in ("type", "enabled")}
-        out = EFFECTS[kind](out, rate, **params)
+        try:
+            amount = float(step.get("amount", 1.0)) * float(strength)
+        except (TypeError, ValueError):
+            raise ValueError(f"The amount for '{kind}' must be a number.") from None
+        amount = min(max(amount, 0.0), 4.0)
+        if amount == 0.0:
+            continue
+        params = {k: v for k, v in step.items() if k not in ("type", "enabled", "amount")}
+        wet = EFFECTS[kind](out, rate, **params)
+        out = wet if amount == 1.0 else _blend(out, wet, amount, lead_in=kind in LEAD_IN)
     peak = float(np.max(np.abs(out))) if out.size else 0.0
     if peak > 0.97:
         out = out * (0.97 / peak)

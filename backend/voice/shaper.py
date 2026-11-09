@@ -48,6 +48,31 @@ class ShapeParams:
     robot: bool = False              # fixed pitch (monotone, mechanical)
     layers: list = field(default_factory=list)   # extra voices [{semitones, formant_shift, gain}] (demon, choir)
 
+    def scaled(self, strength: float) -> "ShapeParams":
+        """The same change at a different strength: 0 = the original voice, 1 = as set, 1.5 = exaggerated.
+
+        Additive values scale towards 0, factors (speed, pitch range) towards 1, extra layers get
+        quieter. Wobble rates stay as they are; only how much wobble changes. Whisper and robot are
+        on/off, so they turn off at 0 and stay on otherwise.
+        """
+        s = max(0.0, float(strength))
+        if s == 1.0:
+            return ShapeParams(**asdict(self))
+        out = ShapeParams(**asdict(self))
+        for f in fields(ShapeParams):
+            value = getattr(self, f.name)
+            if f.name in ("pitch_range", "speed"):
+                setattr(out, f.name, max(0.05, 1.0 + (value - 1.0) * s))
+            elif f.name in ("whisper", "robot"):
+                setattr(out, f.name, bool(value) and s > 0)
+            elif f.name == "layers":
+                setattr(out, f.name, [{**layer, "gain": float(layer.get("gain", 0.6)) * s} for layer in value] if s > 0 else [])
+            elif f.name in ("tremor_rate", "vibrato_rate"):
+                continue
+            else:
+                setattr(out, f.name, value * s)
+        return out
+
     def merged(self, other: "ShapeParams") -> "ShapeParams":
         """Advanced adjustments add to (or for factors multiply) the simple-derived values."""
         out = ShapeParams(**asdict(self))
@@ -280,7 +305,7 @@ def render(analysis: Analysis, params: ShapeParams, seed: int = 0) -> np.ndarray
 
 
 def shape(audio: np.ndarray, rate: int, simple: Optional[dict] = None, advanced: Optional[dict] = None,
-          key: Optional[str] = None, seed: int = 0) -> tuple[np.ndarray, dict]:
+          key: Optional[str] = None, seed: int = 0, strength: float = 1.0) -> tuple[np.ndarray, dict]:
     """Analyse (cached), derive parameters from the simple controls, add advanced ones, render."""
     analysis = analyse(audio, rate, key)
     simple = simple or {}
@@ -288,6 +313,6 @@ def shape(audio: np.ndarray, rate: int, simple: Optional[dict] = None, advanced:
                        gender=simple.get("gender", "as_recorded"), gender_strength=simple.get("gender_strength", 1.0),
                        speed=simple.get("speed", 1.0))
     extra = ShapeParams(**{k: v for k, v in (advanced or {}).items() if k in {f.name for f in fields(ShapeParams)}})
-    final = base.merged(extra)
+    final = base.merged(extra).scaled(strength)
     out = render(analysis, final, seed=seed)
     return out, {"analysis": analysis.summary(), "params": asdict(final)}

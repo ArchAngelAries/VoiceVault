@@ -206,6 +206,18 @@ def fit(entry: Entry, vram: Optional[float]) -> str:
     return "offload"
 
 
+def _drama_sizes(entry) -> dict:
+    """The Drama 3 sizes a user can build, which are built already, and whether the original is kept."""
+    from models.drama_convert import LEVELS, level_name
+    dest = next((s.dest for s in entry.sources if s.kind == "drama_convert"), "")
+    where = installed(entry)[1]
+    folders = [models_dir() / dest] + ([Path(where), Path(where).parent] if where else [])
+    built = {lv for lv in LEVELS if any((f / level_name(lv)).is_file() for f in folders)}
+    kept = (models_dir() / ".drama3-work" / "drama-3-final" / "codec.pth").is_file()
+    return {"levels": [{"id": lv, **{k: v for k, v in info.items()}, "built": lv in built} for lv, info in LEVELS.items()],
+            "original_kept": kept}
+
+
 def catalog() -> dict:
     accepted = _read("accepted.json")
     owned = _read("installed.json")
@@ -218,6 +230,8 @@ def catalog() -> dict:
                       "size_bytes": cached_sizes.get(e.id), "fit": fit(e, vram),
                       "downloadable": all(s.kind != "manual" for s in e.sources) and (e.id != "espeak_ng" or os.name == "nt"),
                       "owned": e.id in owned, "job": _active_job(e.id)})
+        if any(s.kind == "drama_convert" for s in e.sources):
+            items[-1]["sizes"] = _drama_sizes(e)
     return {"items": items, "models_dir": str(models_dir()), "vram_gb": round(vram, 1) if vram else None}
 
 
@@ -261,12 +275,28 @@ def start(entry_id: str, accept_license: bool, options: Optional[dict] = None) -
         accept(entry_id)
     if _active_job(entry_id):
         raise ModelError("This model is already downloading.")
-    options = {k: bool(v) for k, v in (options or {}).items() if k in ("also_max", "keep_checkpoint")}
+    raw = options or {}
+    options = {k: bool(v) for k, v in raw.items() if k in ("also_max", "keep_checkpoint", "acknowledge_lower_quality")}
     total = sizes(entry_id)
     need = total * 1.1 if total else 0
     if any(s.kind == "drama_convert" for s in entry.sources):
-        from models.drama_convert import disk_needed
-        need = disk_needed(options.get("also_max", False))
+        from models.drama_convert import LEVELS, disk_needed
+        levels = raw.get("levels") or []
+        if not isinstance(levels, list) or any(lv not in LEVELS for lv in levels):
+            raise ModelError("Unknown Drama 3 size. Choose from: " + ", ".join(v["label"] for v in LEVELS.values()) + ".")
+        options["levels"] = list(dict.fromkeys(levels))
+        if any(LEVELS[lv]["warning"] for lv in options["levels"]) and not options.get("acknowledge_lower_quality"):
+            raise ModelError("Smaller Drama 3 sizes can lose quality. Confirm that you understand this before building them.")
+        from models.drama_convert import clean_levels, level_name
+        work = models_dir() / ".drama3-work"
+        have = (work / "drama-3-final" / "codec.pth").is_file()
+        dest = next((s.dest for s in entry.sources if s.kind == "drama_convert"), "")
+        built = [lv for lv in clean_levels(options["levels"], options.get("also_max", False))
+                 if (models_dir() / dest / level_name(lv)).is_file()]
+        need = disk_needed(options.get("also_max", False), options["levels"], have_checkpoint=have) \
+            - sum(LEVELS[lv]["bytes"] for lv in built)
+        if len(built) == len(clean_levels(options["levels"], options.get("also_max", False))):
+            need = 0   # nothing new to build
     models_dir().mkdir(parents=True, exist_ok=True)
     free = shutil.disk_usage(models_dir()).free
     if need and free < need:

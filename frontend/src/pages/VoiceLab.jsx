@@ -61,6 +61,9 @@ export default function VoiceLab() {
   const [simple, setSimple] = useState(SIMPLE_DEFAULTS)
   const [adv, setAdv] = useState(ADV_DEFAULTS)
   const [effects, setEffects] = useState([])
+  // How strongly the reshaping and the effects are applied: 0 = off, 1 = as set, up to 1.5 = exaggerated.
+  const [shapeStrength, setShapeStrength] = useState(1)
+  const [effectsStrength, setEffectsStrength] = useState(1)
   const [mode, setMode] = useState('shape')          // shape | convert
   const [target, setTarget] = useState('')
   const [vc, setVc] = useState({ steps: 16, similarity: 0.7, intelligibility: 0.7 })
@@ -90,8 +93,9 @@ export default function VoiceLab() {
 
   const body = useMemo(() => {
     const changedAdv = Object.fromEntries(Object.entries(adv).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(ADV_DEFAULTS[k])))
-    return { source: source && { kind: source.kind, id: source.id, name: source.name }, simple, advanced: changedAdv, effects }
-  }, [source, simple, adv, effects])
+    return { source: source && { kind: source.kind, id: source.id, name: source.name }, simple, advanced: changedAdv, effects,
+      shape_strength: shapeStrength, effects_strength: effectsStrength }
+  }, [source, simple, adv, effects, shapeStrength, effectsStrength])
 
   const render = async () => {
     if (!source) return
@@ -116,8 +120,9 @@ export default function VoiceLab() {
     setSimple({ ...SIMPLE_DEFAULTS, ...(p.simple || {}) })
     setAdv({ ...ADV_DEFAULTS, ...(p.advanced || {}) })
     setEffects((p.effects || []).map(e => ({ ...e })))
+    setShapeStrength(1); setEffectsStrength(1)
   }
-  const reset = () => { setSimple(SIMPLE_DEFAULTS); setAdv(ADV_DEFAULTS); setEffects([]) }
+  const reset = () => { setSimple(SIMPLE_DEFAULTS); setAdv(ADV_DEFAULTS); setEffects([]); setShapeStrength(1); setEffectsStrength(1) }
   const pick = (kind, item) => {
     const s = kind === 'generation' ? { kind, name: item.file, label: item.text?.slice(0, 50) || item.file }
       : kind === 'reference' ? { kind, id: item.reference_id, label: item.name || item.reference_id.slice(0, 8) }
@@ -238,6 +243,15 @@ export default function VoiceLab() {
                   </div>))}
               </div>}
 
+              <div className="grid md:grid-cols-2 gap-3 rounded-lg border border-vault-border/70 p-3">
+                <Slider label="Voice change strength" min={0} max={1.5} step={0.05} value={shapeStrength}
+                  display={shapeStrength === 0 ? 'off' : `${Math.round(shapeStrength * 100)}%`} onChange={setShapeStrength}
+                  hint="How much of the age, pitch, gender and Advanced changes is applied. 0% is the original voice; 100% is as set; above 100% exaggerates." />
+                <Slider label="Effects strength" min={0} max={1.5} step={0.05} value={effectsStrength}
+                  display={effectsStrength === 0 ? 'off' : `${Math.round(effectsStrength * 100)}%`} onChange={setEffectsStrength}
+                  hint="How much of the effects chain (reverb, robot, echo…) is heard. Each effect also has its own Amount under Advanced." />
+              </div>
+
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={() => setShowAdvanced(s => !s)} className="font-mono text-xs text-vault-muted hover:text-vault-text">{showAdvanced ? '▾' : '▸'} Advanced controls & effects</button>
                 <button onClick={reset} className="font-mono text-xs text-vault-muted hover:text-vault-text">Reset</button>
@@ -271,7 +285,11 @@ export default function VoiceLab() {
                     <div key={i} className="flex flex-wrap items-center gap-2 rounded border border-vault-border p-1.5">
                       <input type="checkbox" checked={e.enabled !== false} onChange={ev => setEffects(effects.map((x, j) => j === i ? { ...x, enabled: ev.target.checked } : x))} />
                       <span className="w-28 font-mono text-[11px] text-vault-text">{e.type}</span>
-                      {Object.entries(e).filter(([k]) => !['type', 'enabled'].includes(k)).map(([k, v]) => (
+                      <label className="flex items-center gap-1.5 text-[10px] text-vault-muted" title="How much of this effect is heard: 0% off, 100% as designed, up to 150% exaggerated.">amount
+                        <input type="range" min={0} max={1.5} step={0.05} value={e.amount ?? 1} aria-label={`${e.type} amount`}
+                          onChange={ev => setEffects(effects.map((x, j) => j === i ? { ...x, amount: Number(ev.target.value) } : x))} className="w-24 accent-vault-accent" />
+                        <span className="w-9 text-right font-mono text-vault-text">{Math.round((e.amount ?? 1) * 100)}%</span></label>
+                      {Object.entries(e).filter(([k]) => !['type', 'enabled', 'amount'].includes(k)).map(([k, v]) => (
                         <label key={k} className="flex items-center gap-1 text-[10px] text-vault-muted">{k}
                           {Array.isArray(v) ? <input value={v.join(',')} onChange={ev => setEffects(effects.map((x, j) => j === i ? { ...x, [k]: ev.target.value.split(',').map(Number) } : x))} className={clsx(field, 'w-24 py-0.5')} />
                             : typeof v === 'string' ? <input value={v} onChange={ev => setEffects(effects.map((x, j) => j === i ? { ...x, [k]: ev.target.value } : x))} className={clsx(field, 'w-20 py-0.5')} />

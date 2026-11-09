@@ -18,7 +18,8 @@ router = APIRouter()
 class DownloadIn(BaseModel):
     id: str = Field(max_length=60)
     accept_license: bool = False
-    options: dict[str, bool] = Field(default_factory=dict)   # Drama 3: also_max, keep_checkpoint
+    # Drama 3: also_max, keep_checkpoint, acknowledge_lower_quality (bools) and levels (e.g. ["q3_k", "q6_k"])
+    options: dict[str, bool | list[str]] = Field(default_factory=dict)
 
 
 def _call(fn, *args):

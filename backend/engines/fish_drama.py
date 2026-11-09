@@ -205,8 +205,11 @@ def _describe_package(name: str) -> str:
     # VoiceVault's own conversion is named drama-3-final-*; the community packages came from the preview.
     weights = "final weights, Oct 29" if "final" in low else "preview weights, Oct 13"
     if "routers" in low:
-        weights += "; full-precision routers and speech head, max quality, slower"
-    return f"35B MoE GGUF ({experts} experts, {backbone}; {weights})"
+        weights += "; full-precision routers and speech head"
+    # Say plainly when a build is smaller than the tested ones: smaller sizes can lose quality.
+    quality = {"Q2_K": " · smallest, lower quality", "Q3_K": " · smaller, lower quality",
+               "Q5_K": "", "Q6_K": " · max quality, slower", "Q8_0": " · closest to original, slowest"}.get(experts, "")
+    return f"35B MoE GGUF ({experts} experts, {backbone}; {weights}){quality}"
 
 
 # ── GPU / system-RAM split ───────────────────────────────────────────────────

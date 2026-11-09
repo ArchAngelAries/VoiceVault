@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.2.1 — 2026-11-09
+
+### Converse
+- **Replay any spoken reply.** Every reply that was spoken has a Replay button, and it keeps working after you switch chats or restart. Older replies offer Speak, which voices them now and keeps the audio for next time.
+- **Pace between sentences** in each character's voice settings (Natural, Relaxed, Dramatic) adds breathing room to live replies.
+
+### Generate
+- **Pacing that works with every voice model.** Pace sets the silence between sentences. Tags in the text give exact control: `[pause 0.8s]` (or `[pause 800ms]`), `[slow]…[/slow]`, `[fast]…[/fast]` and `[speed 0.7]…[/speed]`. Agents can use them too (`vv_speak` with `pace`).
+
+### Voice Lab
+- **Strength controls.** Voice change strength and Effects strength (0–150%) dial any preset up or down, so you can have "Elderly" at 60% or a softer robot. Each effect also has its own Amount slider. Agents get the same (`vv_voice_shape` with `strength`).
+
+### Models
+- **Choose Drama 3's size.** Build any of Q2, Q3, Q4, Q5, Q6 and Q8 on your PC, and keep the downloaded original to build more later without downloading again. The app says plainly that smaller sizes can lose quality: every size uses the same proven method, Q4 and Q6 are the ones tested on our PC, sizes below Q4 are labelled "lower quality" and need a confirmation, and model pickers show each size. See [docs/QUANTIZATION.md](docs/QUANTIZATION.md).
+
+### Setup
+- **NVIDIA graphics cards: first-run setup no longer fails.** Setup installed PyTorch 2.6 from the CUDA 12.4 channel, which clashed with VoiceVault's other packages (a sympy version conflict), so "Install the voice engine packages" stopped. Every card now gets the same PyTorch 2.9.1: CUDA 12.8 on NVIDIA (CUDA 12.6 when the driver is older than 570), ROCm 7.2 on AMD, and the CPU build otherwise. If an earlier setup left a different PyTorch version, setup now replaces it instead of keeping it. Thanks to @DeeplyParallel for the report and diagnosis ([#1](https://github.com/ArchAngelAries/VoiceVault/issues/1)).
+
 ## 0.2.0 — 2026-11-07
 
 ### Cast (new page)

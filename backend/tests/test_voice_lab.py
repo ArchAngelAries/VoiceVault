@@ -134,3 +134,59 @@ def test_api_upload_shape_save_as_reference_and_generation(client):
     assert c.post("/api/voice/shape", json={"source": src, "effects": [{"type": "nope"}]}).status_code == 400
     presets = c.get("/api/voice/presets").json()
     assert "female" in json.dumps(presets["presets"]) and "responsible" in presets["disclaimer"]
+
+
+# ── Strength controls ───────────────────────────────────────────────────────
+
+def test_effect_amount_blends_from_none_to_exaggerated():
+    v = _voice(130, seconds=0.5)
+    chain = [{"type": "distortion", "drive": 8, "mix": 1.0}]
+    full = fx.apply_chain(v, RATE, chain)
+    off = fx.apply_chain(v, RATE, [{**chain[0], "amount": 0}])
+    half = fx.apply_chain(v, RATE, [{**chain[0], "amount": 0.5}])
+    assert np.allclose(off, v, atol=1e-6)                       # 0 = untouched
+    d_full, d_half = np.abs(full - v).mean(), np.abs(half - v).mean()
+    assert 0.3 * d_full < d_half < 0.7 * d_full                 # in between
+    assert np.allclose(fx.apply_chain(v, RATE, chain, strength=0), v, atol=1e-6)   # overall strength 0 = no effects
+    # an effect with a tail keeps its tail when blended
+    echo = fx.apply_chain(v, RATE, [{"type": "echo", "delay": 0.2, "repeats": 3, "amount": 0.5}])
+    assert len(echo) == len(v) + int(0.2 * RATE) * 3
+    with pytest.raises(ValueError, match="amount"):
+        fx.apply_chain(v, RATE, [{"type": "echo", "amount": "lots"}])
+
+
+def test_shape_strength_scales_towards_the_original_voice():
+    params = shaper.ShapeParams(pitch_semitones=6, formant_shift=10, speed=1.4, roughness=0.6, tremor_depth=1.2,
+                                tremor_rate=6.0, whisper=True, layers=[{"semitones": -12, "gain": 0.6}])
+    half = params.scaled(0.5)
+    assert half.pitch_semitones == 3 and half.formant_shift == 5 and abs(half.speed - 1.2) < 1e-9
+    assert half.tremor_rate == 6.0 and half.whisper and abs(half.layers[0]["gain"] - 0.3) < 1e-9
+    none = params.scaled(0)
+    assert none.pitch_semitones == 0 and none.speed == 1.0 and not none.whisper and none.layers == []
+    assert params.scaled(1.5).pitch_semitones == 9
+    v = _voice(110, seconds=1.5)
+    plain = _median_f0(v)
+    up_full, _ = shaper.shape(v, RATE, {"pitch": 6}, None, key=None)
+    up_half, _ = shaper.shape(v, RATE, {"pitch": 6}, None, key=None, strength=0.5)
+    assert plain < _median_f0(up_half) < _median_f0(up_full)
+
+
+def test_api_accepts_and_records_strengths(client):
+    c, _ = client
+    src = {"kind": "upload", "id": c.post("/api/voice/sources", files={"file": ("me.wav", _wav_bytes(_voice(110, 2.0)), "audio/wav")}).json()["id"]}
+    r = c.post("/api/voice/shape", json={"source": src, "simple": {"age": 1.0}, "shape_strength": 0.4,
+                                        "effects": [{"type": "reverb", "mix": 0.4, "amount": 0.5}], "effects_strength": 1.5})
+    assert r.status_code == 200, r.text
+    assert r.json()["shape_strength"] == 0.4 and r.json()["effects_strength"] == 1.5
+    assert c.post("/api/voice/shape", json={"source": src, "shape_strength": 3}).status_code == 422
+
+
+def test_reverse_reverb_at_partial_strength_stays_in_step():
+    impulse = np.zeros(RATE, np.float32)
+    impulse[100] = 1.0
+    full = fx.apply_chain(impulse, RATE, [{"type": "reverse_reverb", "size": 0.7, "mix": 0.6}])
+    half = fx.apply_chain(impulse, RATE, [{"type": "reverse_reverb", "size": 0.7, "mix": 0.6}], strength=0.5)
+    lead = len(full) - len(impulse)
+    assert len(half) == len(full)
+    assert abs(int(np.argmax(np.abs(half))) - (100 + lead)) < RATE // 100   # the dry voice sits where the wet one does
+    assert abs(half[100]) < 0.05                                              # no early dry copy

@@ -4,15 +4,26 @@ Detects GPU vendor and installs the correct PyTorch build.
 
 Supported:
   AMD   Windows  → ROCm 7.2 wheels from repo.radeon.com
-  NVIDIA         → PyTorch CUDA from pytorch.org index
+  NVIDIA         → PyTorch CUDA 12.8 (12.6 for drivers older than 570) from the pytorch.org index
   Apple Silicon  → PyTorch CPU/MPS from PyPI (Metal built-in)
   CPU fallback   → PyTorch CPU from PyPI
+
+Every build is the same PyTorch version (TORCH_VERSION). backend/requirements-lock.txt is resolved
+against it, so a different version can make setup unsatisfiable (GitHub issue #1: torch 2.6 from the
+CUDA 12.4 index needs sympy 1.13.1 while the lock pins 1.14.0).
 """
 
 import os
+import re
 import subprocess
 import sys
 import platform
+
+TORCH_VERSION = "2.9.1"
+TORCHAUDIO_VERSION = "2.9.1"
+TORCHVISION_VERSION = "0.24.1"
+CUDA_INDEX = "https://download.pytorch.org/whl/{tag}"
+CUDA_12_8_MIN_DRIVER = 570   # CUDA 12.8 (also needed for RTX 50-series) wants driver 570 or newer
 
 def run(cmd: list) -> int:
     print(f"\n  > {' '.join(cmd)}\n", flush=True)
@@ -26,8 +37,11 @@ def install_command(*args, env=None) -> list:
         return [uv, "pip", "install", "--python", sys.executable, *args]
     return [sys.executable, "-m", "pip", "install", "--no-cache-dir", *args]
 
+REINSTALL: list[str] = []   # set by main() when a different torch build must be replaced
+
+
 def pip(*args) -> int:
-    return run(install_command(*args))
+    return run(install_command(*REINSTALL, *args))
 
 def detect_gpu() -> tuple[str, str]:
     """
@@ -51,10 +65,12 @@ def detect_gpu() -> tuple[str, str]:
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
                 output = result.stdout.upper()
-                if "AMD" in output or "RADEON" in output:
-                    return "amd", "AMD Radeon (ROCm 7.2)"
+                # NVIDIA first: a laptop with an AMD processor (Radeon integrated graphics) and an NVIDIA
+                # card must get CUDA. A PC with only an AMD card (no NVIDIA adapter) still gets ROCm.
                 if "NVIDIA" in output or "GEFORCE" in output or "QUADRO" in output or "RTX" in output or "GTX" in output:
                     return "nvidia", "NVIDIA (CUDA)"
+                if "AMD" in output or "RADEON" in output:
+                    return "amd", "AMD Radeon (ROCm 7.2)"
             except Exception:
                 continue
 
@@ -62,7 +78,8 @@ def detect_gpu() -> tuple[str, str]:
     if system == "Linux":
         try:
             result = subprocess.run(["lspci"], capture_output=True, text=True, timeout=10)
-            output = result.stdout.upper()
+            # Only display adapters: AMD processors also list "Advanced Micro Devices" host bridges.
+            output = "\n".join(line for line in result.stdout.upper().splitlines() if "VGA" in line or "3D" in line or "DISPLAY" in line)
             if "AMD" in output or "RADEON" in output or "ADVANCED MICRO" in output:
                 return "amd", "AMD Radeon (ROCm)"
             if "NVIDIA" in output:
@@ -100,17 +117,43 @@ def install_amd_linux():
     )
 
 
+def nvidia_driver_major() -> int | None:
+    """The NVIDIA driver's major version (for example 572), or None when nvidia-smi can't tell."""
+    try:
+        result = subprocess.run(["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"],
+                                capture_output=True, text=True, timeout=20)
+        match = re.match(r"\s*(\d+)\.", result.stdout)
+        return int(match.group(1)) if result.returncode == 0 and match else None
+    except Exception:
+        return None
+
+
+def cuda_tag(driver_major: int | None) -> str:
+    """cu128 for current drivers (and when the driver can't be read); cu126 for drivers older than 570."""
+    return "cu126" if driver_major is not None and driver_major < CUDA_12_8_MIN_DRIVER else "cu128"
+
+
 def install_nvidia():
-    print("  Installing PyTorch with CUDA 12.4...")
+    tag = cuda_tag(nvidia_driver_major())
+    print(f"  Installing PyTorch {TORCH_VERSION} with CUDA {tag[2:4]}.{tag[4:]}...")
+    if tag == "cu126":
+        print("  (Your NVIDIA driver is older than 570; update it for CUDA 12.8 and RTX 50-series support.)")
     return pip(
-        "--index-url", "https://download.pytorch.org/whl/cu124",
-        "torch", "torchaudio", "torchvision",
+        "--index-url", CUDA_INDEX.format(tag=tag),
+        f"torch=={TORCH_VERSION}", f"torchaudio=={TORCHAUDIO_VERSION}", f"torchvision=={TORCHVISION_VERSION}",
     )
 
 
 def install_cpu():
-    print("  Installing PyTorch CPU build...")
-    return pip("torch", "torchaudio", "torchvision")
+    print(f"  Installing PyTorch {TORCH_VERSION} CPU build...")
+    return pip(f"torch=={TORCH_VERSION}", f"torchaudio=={TORCHAUDIO_VERSION}", f"torchvision=={TORCHVISION_VERSION}")
+
+
+def keep_existing(current: str) -> bool:
+    """Keep an installed GPU build only when it is the version VoiceVault is built for."""
+    if not ("+rocm" in current or "+cu" in current):
+        return False
+    return current.split("+", 1)[0] == TORCH_VERSION
 
 
 def verify():
@@ -145,9 +188,20 @@ def main():
     print(f"  Detected: {description}")
     system = platform.system()
 
-    # Never replace a working GPU build. A failed GPU probe must not turn into a CPU reinstall.
+    # Never replace a working GPU build of the right version. A failed GPU probe must not turn into a
+    # CPU reinstall. A GPU build of another version (for example torch 2.6 from an earlier setup) is
+    # replaced, because the rest of VoiceVault's packages are resolved against TORCH_VERSION.
     current = existing_torch_version()
-    if "+rocm" in current or "+cu" in current:
+    if current and not keep_existing(current):
+        print(f"\n  Replacing torch {current} with {TORCH_VERSION}, the build VoiceVault's packages need.")
+        # The installed build says which card it was made for, more reliably than the adapter probe.
+        if "+cu" in current:
+            vendor = "nvidia"
+        elif "+rocm" in current:
+            vendor = "amd"
+        # Without this, pip and uv see "2.9.1+cpu" as already satisfying torch==2.9.1 and do nothing.
+        REINSTALL[:] = ["--force-reinstall", "--no-deps"]
+    if keep_existing(current):
         print(f"\n  Keeping the installed GPU build: torch {current}")
         if vendor == "cpu":
             print("  (GPU probe found no AMD or NVIDIA adapter; the existing build was left untouched.)")

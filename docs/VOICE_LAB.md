@@ -21,6 +21,13 @@ User disclaimer, shown on the page: users are responsible for what they create. 
   - *Voice changer*: robot, cyborg, ghost, alien, demon, monster/orc, old radio, telephone, megaphone, cave, underwater, space helmet.
 - **Live preview** re-renders about 0.5 s after a change. A 40 s clip renders in about 4 s on the CPU; analysis is cached per clip.
 
+## Strength (how much of a change)
+
+- **Voice change strength** scales the whole reshaping (age, pitch, gender, speed and the Advanced values) from 0% (the original voice) through 100% (as set) to 150% (exaggerated). Use it to apply a preset gently, for example "Elderly" at 60%.
+- **Effects strength** does the same for the effects chain: reverb, echo, robot, ghost and so on.
+- Each effect also has its own **Amount** slider under Advanced, for fine-tuning one effect without touching the others.
+- Both strengths are saved with the voice and passed to agents through `vv_voice_shape` (`strength`, `effects_strength`).
+
 ## Advanced mode (power users)
 
 Values add to the simple sliders (speed and pitch range multiply), and nothing is capped.

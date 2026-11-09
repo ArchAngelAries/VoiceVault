@@ -31,7 +31,7 @@ import urllib.request
 from typing import Any, Callable
 
 PROTOCOL = "2025-06-18"
-SERVER = {"name": "voicevault", "version": "0.2.0"}
+SERVER = {"name": "voicevault", "version": "0.2.1"}
 BASE = os.environ.get("VOICEVAULT_URL", "http://127.0.0.1:7763").rstrip("/")
 PATH_KEYS = {"path", "paths", "root", "roots", "runtime", "file_path", "folder", "source_path", "original_file",
              "preview_file", "dir"}
@@ -294,7 +294,10 @@ def _pick_model(query: str | None, need_clone: bool) -> dict:
        "voice_description": S("Optional description, e.g. 'warm elderly male narrator' (models with voice_from_description).", maxLength=1000),
        "model": S("Optional speech model name or id from vv_list_speech_models. Picked automatically if empty.", maxLength=200),
        "language": S("Optional language, e.g. 'en'.", maxLength=40),
-       "seed": I("Optional seed for a repeatable result.", minimum=0, maximum=2**32 - 1)},
+       "seed": I("Optional seed for a repeatable result.", minimum=0, maximum=2**32 - 1),
+       "pace": S("Silence between sentences: tight, natural (default), relaxed or dramatic. Tags in the text also work "
+                 "with every model: [pause 0.8s], [slow]...[/slow], [fast]...[/fast], [speed 0.7]...[/speed].",
+                 enum=["tight", "natural", "relaxed", "dramatic"])},
       ["text"], read_only=False)
 def vv_speak(a):
     voice = find_voice(a["voice"]) if a.get("voice") else None
@@ -304,6 +307,8 @@ def vv_speak(a):
         body["reference_id"] = voice["reference_id"]
         if voice.get("transcript"):
             body["reference_text"] = voice["transcript"]
+    if a.get("pace"):
+        body["pacing"] = a["pace"]
     for k in ("voice_description", "language", "seed"):
         if a.get(k) not in (None, ""):
             body[k] = a[k]
@@ -383,14 +388,19 @@ def _source(a: dict) -> dict:
       "Makes a preview only; call vv_voice_save to keep it.",
       {"preset": S("Preset key or name from vv_voice_presets.", maxLength=80),
        "voice": S("A saved voice to reshape (name or id).", maxLength=120),
-       "generation": S("Or a generation file name to reshape.", maxLength=200)},
+       "generation": S("Or a generation file name to reshape.", maxLength=200),
+       "strength": N("How strongly to change the voice: 0 = original, 1 = as the preset sets it (default), "
+                     "up to 2 = exaggerated.", minimum=0, maximum=2),
+       "effects_strength": N("How much of the preset's effects (reverb, robot, echo...) is heard: 0 = none, "
+                             "1 = as designed (default), up to 2.", minimum=0, maximum=2)},
       ["preset"], read_only=False)
 def vv_voice_shape(a):
     presets = api("GET", "/api/voice/presets").get("presets", {})
     items = [{"key": k, **v} for k, v in presets.items()]
     p = resolve(a["preset"], items, lambda x: x.get("label") or x["key"], lambda x: x["key"], "preset")
     body = {"source": _source(a), "simple": p.get("simple") or {}, "advanced": p.get("advanced") or {},
-            "effects": p.get("effects") or []}
+            "effects": p.get("effects") or [], "shape_strength": a.get("strength", 1.0),
+            "effects_strength": a.get("effects_strength", 1.0)}
     r = api("POST", "/api/voice/shape", body, timeout=600)
     pid = r.get("preview_id") or r.get("id")
     return {"preview_id": pid, "listen": url(f"/api/voice/previews/{pid}"), "preset": p.get("label"),

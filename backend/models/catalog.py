@@ -61,13 +61,15 @@ def _f(*files: str, dest: str = "", repo: str = AUDIOCPP) -> Source:
 
 CATALOG: list[Entry] = [
     # ── Speech ─────────────────────────────────────────────────────────────────
-    Entry("drama3_final", "Fish Audio Drama 3 (final, Q4 / Q6)", "Speech",
+    Entry("drama3_final", "Fish Audio Drama 3 (final; sizes Q2–Q8)", "Speech",
           "The most natural speech and voice cloning; multi-voice scenes. VoiceVault's default voice.",
           [Source(kind="drama_convert", repo="fishaudio/drama-3", dest="Drama-3-GGUF-final",
                   revision="78e5ab79e49aa9a25abe8799eff2c4d73a1c3216", url="https://huggingface.co/fishaudio/drama-3",
                   steps=["Downloads Fish Audio's official final checkpoint (41.5 GB) and converts it on this PC with "
                          "audio.cpp's own converter into the Q4 package (about 25 GB).",
-                         "Optional: also build the Max quality Q6 package (about 34 GB, slower voice).",
+                         "Optional: build other sizes too, from Q2 (about 17 GB, lower quality) to Q8 (about 42 GB, closest "
+                         "to the original). Smaller sizes use less memory but can lose quality; Q4 and Q6 are the tested ones. "
+                         "Keep the downloaded original to build more sizes later without downloading again.",
                          "Needs about 140 GB free while converting (about 175 GB with Q6), 32 GB of RAM or more, and "
                          "an hour or more of CPU time. Temporary files are deleted at the end."])],
           "Fish Audio Community License 1.0", "https://huggingface.co/fishaudio/drama-3", "limited", vram_gb=16,

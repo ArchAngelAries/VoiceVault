@@ -30,6 +30,8 @@ export const listSessions = () => request('/sessions')
 export const suggestProfile = (body, signal) => request('/profile-suggestions', { method: 'POST', body: JSON.stringify(body), signal })
 export const createSession = (body) => request('/sessions', { method: 'POST', body: JSON.stringify(body) })
 export const getSession = (id) => request(`/sessions/${encodeURIComponent(id)}`)
+// Link spoken audio to a reply: { files, index } or { files, text, speaker_id } (matched by its first sentence).
+export const linkMessageAudio = (id, body) => request(`/sessions/${encodeURIComponent(id)}/audio`, { method: 'POST', body: JSON.stringify(body) })
 export const updateSession = (id, body) => request(`/sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) })
 export const listChatModels = (body) => request('/models', { method: 'POST', body: JSON.stringify(body) })
 export const getChatConnection = () => request('/connection')

@@ -36,7 +36,7 @@ from core.model_paths import model_roots
 from core.paths import DATA_DIR, DEFAULT_OUTPUTS_DIR, VERIFICATION_FILE
 from engines import audio_store
 from engines.audio_io import is_valid_audio_name, list_generations, save_generation
-from engines import longform
+from engines import longform, pacing
 from engines.base import EngineError, SpeakerReference, SynthesisRequest, SynthesisResult
 from engines.delivery import Delivery, resolve_delivery
 from engines.breeze import BreezeEngine
@@ -146,6 +146,9 @@ class SynthesizeRequest(BaseModel):
     dtype: Literal["bfloat16", "float16", "float32"] = "bfloat16"
     delivery: Optional[Delivery] = None
     speakers: Optional[list[SpeakerVoice]] = Field(default=None, max_length=16)
+    # Silence between sentences: tight / natural (as generated) / relaxed / dramatic. Pacing tags in the
+    # text ([pause 0.8s], [slow]…[/slow], [fast]…[/fast], [speed 0.7]…[/speed]) work with every engine.
+    pacing: Literal["tight", "natural", "relaxed", "dramatic"] = "natural"
 
 
 @router.get("/engines")
@@ -356,9 +359,17 @@ async def _run_synthesis(body: SynthesizeRequest):
         speakers=speakers,
     )
     try:
-        result = await asyncio.to_thread(
-            synthesize_text, manager, body.model_id, request, engine, body.device, body.dtype
-        )
+        if pacing.needed(request.text, body.pacing):
+            if body.speakers:
+                raise EngineError("Pacing tags and the pace setting work with one voice at a time, not multi-speaker scenes.")
+            run = lambda req: synthesize_text(manager, body.model_id, req, engine, body.device, body.dtype)  # noqa: E731
+            result = await asyncio.to_thread(pacing.synthesize, run, request, body.pacing)
+        else:
+            result = await asyncio.to_thread(
+                synthesize_text, manager, body.model_id, request, engine, body.device, body.dtype
+            )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
     except EngineError as exc:
         raise HTTPException(422, str(exc))
     except Exception:

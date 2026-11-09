@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AlertCircle, Bot, Brain, Check, Loader2, MessageCircle, Pencil, Plus, RefreshCw, Save, Search, Send, Square, Trash2, Volume2, VolumeX, X } from 'lucide-react'
 import { audioUrl, getEngines, getModels, getReferences, synthesize, warmModel } from '@/api/tts'
-import { createSession, deleteSession, getChatConnection, getEarlierMessages, getSession, listChatModels, listSessions, searchSessions, streamMessage, streamScene, updateSession } from '@/api/converse'
+import { createSession, deleteSession, getChatConnection, getEarlierMessages, getSession, linkMessageAudio, listChatModels, listSessions, searchSessions, streamMessage, streamScene, updateSession } from '@/api/converse'
+import ReplayButton from '@/components/converse/ReplayButton'
 import MemoryPanel from '@/components/converse/MemoryPanel'
 import SceneControls from '@/components/converse/SceneControls'
 import { normalizeScene } from '@/components/converse/sceneSettings'
@@ -22,7 +23,7 @@ import DeliveryControls from '@/components/tts/DeliveryControls'
 import SavedVoicePresets from '@/components/tts/SavedVoicePresets'
 import { DEFAULT_GENERATION, presetVoiceSettings } from '@/lib/savedVoicePreset'
 import { createSpeechQueue } from '@/components/converse/speechQueue'
-import { speechSnapshot } from '@/components/converse/speechRouting'
+import { PACE_GAP_SECONDS, speechSnapshot } from '@/components/converse/speechRouting'
 import { DEFAULT_LLM_PROVIDER, LLM_PROVIDERS, isNativeCloudProvider, modelsForDisplay, normalizeLlmProvider, providerDefaultEndpoint, providerRequiresApiKey } from '@/lib/llmProviders'
 import {
   buildRosterPayload, characterForMessage, EMPTY_CHARACTER_PROFILE, MAX_CHAT_CHARACTERS,
@@ -109,6 +110,7 @@ export default function Converse({ sceneCreation = false }) {
   const speechQueueRef = useRef(null)
   const requestIdentityRef = useRef(0)
   const activeSessionIdRef = useRef(null)
+  const sessionOffsetRef = useRef(0)   // messages before the first one shown (long chats load in pages)
   const activeSpeakerIdRef = useRef('primary')
   const aliveRef = useRef(true)
   const lifecycleRef = useRef(0)
@@ -140,35 +142,44 @@ export default function Converse({ sceneCreation = false }) {
   const selectedCharacter = characters.find(item => item.id === activeSpeakerId) || characters[0]
   const persistedCharacters = normalizeCharacters(session)
   const currentAssistant = [...messages].reverse().find(item => item.role === 'assistant' && item.content?.trim())
-  const replyRosterCharacter = currentAssistant ? characterForMessage(currentAssistant, persistedCharacters) : null
-  const replyCharacter = replyRosterCharacter && currentAssistant?.profile_snapshot
-    && (sceneCreation || currentAssistant.profile_snapshot.voice_settings?.model_id)
-    ? { id: replyRosterCharacter.id, profile: currentAssistant.profile_snapshot } : replyRosterCharacter
-  const replyVoiceSettings = replyCharacter?.profile?.voice_settings || null
-  const replyModelId = replyVoiceSettings?.model_id || ''
-  const replyModel = ttsModels.find(item => item.id === replyModelId && USABLE_TTS.has(item.state))
-  const replyEngine = ttsEngines.find(item => item.id === replyModel?.engine_id)
-  const replyCapabilities = replyEngine?.capabilities || {}
-  const replyMode = replyVoiceSettings?.speech_mode === 'reference' ? 'reference' : 'description'
-  const replyReferenceId = replyVoiceSettings?.reference_id || ''
-  let replySpeechProblem = ''
-  if (currentAssistant && currentAssistant.speaker_id && !characters.some(item => item.id === currentAssistant.speaker_id)) {
-    replySpeechProblem = `${messageSpeakerLabel(currentAssistant, persistedCharacters)} was removed from this roster. Their saved reply remains available as text.`
-  } else if (currentAssistant && currentAssistant.speaker_id && !replyCharacter) {
-    replySpeechProblem = `${messageSpeakerLabel(currentAssistant, persistedCharacters)} was removed. Their saved reply remains available as text.`
-  } else if (currentAssistant && !replyModelId) {
-    replySpeechProblem = sceneCreation ? `${replyCharacter?.profile?.name || 'This character'} has no saved voice model. Choose and save one in that character's profile.` : 'Choose a chat voice below to speak this reply.'
-  } else if (currentAssistant && !replyModel) {
-    replySpeechProblem = `The saved voice model “${replyModelId}” is unavailable. Choose and save a replacement${sceneCreation ? ` for ${replyCharacter?.profile?.name || 'this character'}` : ''}.`
-  } else if (currentAssistant && replyVoiceSettings.engine_id && replyVoiceSettings.engine_id !== replyModel.engine_id) {
-    replySpeechProblem = 'The saved engine does not match this character’s exact model. Choose and save a replacement explicitly.'
-  } else if (currentAssistant && replyMode === 'reference' && !replyCapabilities.reference_audio) {
-    replySpeechProblem = 'The saved reference voice mode is unavailable for this character’s voice model.'
-  } else if (currentAssistant && replyMode === 'description' && !replyCapabilities.voice_description && replyCapabilities.reference_audio) {
-    replySpeechProblem = 'The saved description voice mode is unavailable for this character’s voice model.'
-  } else if (currentAssistant && replyMode === 'reference' && (!replyReferenceId || !references.some(item => item.reference_id === replyReferenceId))) {
-    replySpeechProblem = `The saved reference clip for ${replyCharacter?.profile?.name || 'this character'} is unavailable. Choose and save another clip.`
+  // The voice a reply is spoken in: the voice it was written with (its snapshot), else its character's.
+  const voiceForReply = reply => {
+    if (!reply) return { character: null, model: null, capabilities: {}, settings: null, mode: 'description', referenceId: '', problem: '' }
+    const rosterCharacter = characterForMessage(reply, persistedCharacters)
+    const character = rosterCharacter && reply.profile_snapshot && (sceneCreation || reply.profile_snapshot.voice_settings?.model_id)
+      ? { id: rosterCharacter.id, profile: reply.profile_snapshot } : rosterCharacter
+    const settings = character?.profile?.voice_settings || null
+    const modelId = settings?.model_id || ''
+    const model = ttsModels.find(item => item.id === modelId && USABLE_TTS.has(item.state))
+    const capabilities = ttsEngines.find(item => item.id === model?.engine_id)?.capabilities || {}
+    const mode = settings?.speech_mode === 'reference' ? 'reference' : 'description'
+    const referenceId = settings?.reference_id || ''
+    const name = character?.profile?.name || 'this character'
+    let problem = ''
+    if (reply.speaker_id && !characters.some(item => item.id === reply.speaker_id)) {
+      problem = `${messageSpeakerLabel(reply, persistedCharacters)} was removed from this roster. Their saved reply remains available as text.`
+    } else if (reply.speaker_id && !character) {
+      problem = `${messageSpeakerLabel(reply, persistedCharacters)} was removed. Their saved reply remains available as text.`
+    } else if (!modelId) {
+      problem = sceneCreation ? `${character?.profile?.name || 'This character'} has no saved voice model. Choose and save one in that character's profile.` : 'Choose a chat voice below to speak this reply.'
+    } else if (!model) {
+      problem = `The saved voice model “${modelId}” is unavailable. Choose and save a replacement${sceneCreation ? ` for ${name}` : ''}.`
+    } else if (settings.engine_id && settings.engine_id !== model.engine_id) {
+      problem = 'The saved engine does not match this character’s exact model. Choose and save a replacement explicitly.'
+    } else if (mode === 'reference' && !capabilities.reference_audio) {
+      problem = 'The saved reference voice mode is unavailable for this character’s voice model.'
+    } else if (mode === 'description' && !capabilities.voice_description && capabilities.reference_audio) {
+      problem = 'The saved description voice mode is unavailable for this character’s voice model.'
+    } else if (mode === 'reference' && (!referenceId || !references.some(item => item.reference_id === referenceId))) {
+      problem = `The saved reference clip for ${name} is unavailable. Choose and save another clip.`
+    }
+    return { character, model, capabilities, settings, mode, referenceId, problem }
   }
+  const latestVoice = voiceForReply(currentAssistant)
+  const replyCharacter = latestVoice.character
+  const replyModel = latestVoice.model
+  const replySpeechProblem = latestVoice.problem
+  sessionOffsetRef.current = session?.messages_offset || 0
 
   const applySpeechSettings = (settings, catalog = speechCatalogRef.current) => {
     setDelivery({ emotion: 'neutral', style: 'natural', expression: null, ...settings?.delivery })
@@ -844,7 +855,15 @@ export default function Converse({ sceneCreation = false }) {
     let segmentCount = 0
     const turnStarted = performance.now()
     let firstAudio = null
+    const audioTurns = []          // per speech turn: { speaker_id, text, files, index, complete } to link for replay
+    let currentTurnAudio = null
+    const replyIndexIn = updated => {
+      const list = updated?.messages || []
+      return list.length && list[list.length - 1]?.role === 'assistant' ? (updated.messages_offset || 0) + list.length - 1 : null
+    }
+    let speechOk = true
     const speechFailed = e => {
+      speechOk = false
       queue?.stop()
       speechController?.abort()
       clausePlayer?.stop()
@@ -867,6 +886,9 @@ export default function Converse({ sceneCreation = false }) {
       // Capture values in this worker so a later scene turn cannot change it.
       const turnSnapshot = snapshot
       const turnSpeechController = speechController
+      const turnAudio = { speaker_id: speakerId, text: '', files: [], index: null, complete: false }
+      audioTurns.push(turnAudio)
+      currentTurnAudio = turnAudio
       queue = createSpeechQueue({ firstMinChunk: 16, play: async (clause, { signal }) => {
         if (signal.aborted || turnSpeechController.signal.aborted || identity !== requestIdentityRef.current) return
         if (++segmentCount > 32 || (spokenCharacters += clause.length) > 8000) throw new Error('The 32 sentence / 8,000 character speech limit was reached. The full text remains available.')
@@ -888,6 +910,8 @@ export default function Converse({ sceneCreation = false }) {
         })
         if (signal.aborted || turnSpeechController.signal.aborted || identity !== requestIdentityRef.current) return
         setSpeechSegments(current => [...current, { ...result, speaker_name: turnSnapshot.speakerName, segment_ms: performance.now() - segmentStarted }])
+        if (result?.file) { turnAudio.files.push(result.file); if (!turnAudio.text) turnAudio.text = clause }
+        clausePlayer.pause(PACE_GAP_SECONDS[turnSnapshot.pacing] || 0)
         setSpeechTiming({ firstAudioMs: firstAudio, segments: segmentCount })
         if (result.meta?.delivery_warnings?.length) setNotice(result.meta.delivery_warnings.join(' '))
         if (result.meta?.truncated) throw new Error('The voice model reached its generation limit during a sentence.')
@@ -930,8 +954,13 @@ export default function Converse({ sceneCreation = false }) {
         onTurnDone: async payload => {
           if (!aliveRef.current || identity !== requestIdentityRef.current) return
           acceptSession(payload.session)
+          const turn = currentTurnAudio
+          if (turn) turn.index = replyIndexIn(payload.session)
           if (queue && !queue.stopped) {
-            try { await queue.flush() } catch (e) { speechFailed(e) }
+            try {
+              const outcome = await queue.flush()
+              if (turn && outcome?.status === 'done' && !clausePlayer?.stopped) turn.complete = true
+            } catch (e) { speechFailed(e) }
           }
           if (identity === requestIdentityRef.current) setSceneProgress(current => ({ ...current, completed: payload.turn_index }))
         },
@@ -958,11 +987,20 @@ export default function Converse({ sceneCreation = false }) {
             try { await queue.addText(chunk) } catch (e) { speechFailed(e) }
           }
         },
-        onDone: (updated, payload) => { acceptSession(updated); if (payload?.memory) setMemoryInfo(payload.memory) },
+        onDone: (updated, payload) => {
+          acceptSession(updated)
+          if (currentTurnAudio) currentTurnAudio.index = replyIndexIn(updated)
+          if (payload?.memory) setMemoryInfo(payload.memory)
+        },
       })
       if (queue && !queue.stopped) {
         if (!sceneRun) setSending(false)
-        try { await queue.flush(); await clausePlayer.finish() } catch (e) { speechFailed(e) }
+        try {
+          const turn = currentTurnAudio
+          const outcome = await queue.flush()
+          await clausePlayer.finish()
+          if (turn && outcome?.status === 'done' && !clausePlayer.stopped) turn.complete = true
+        } catch (e) { speechFailed(e) }
       }
     } catch (e) {
       queue?.stop()
@@ -986,22 +1024,57 @@ export default function Converse({ sceneCreation = false }) {
         setAudioPlaying(false)
       }
       clausePlayer?.stop()
+      if (speechOk && !controller.signal.aborted) {
+        // Only speech that played to the end is kept for replay; a stopped reply offers Speak instead.
+        for (const turn of audioTurns) {
+          if (!turn.complete || !turn.files.length) continue
+          rememberAudio(sessionId, turn.index !== null
+            ? { files: turn.files, index: turn.index }
+            : { files: turn.files, text: turn.text, speaker_id: turn.speaker_id })
+        }
+      }
       if (speechQueueRef.current === queue) speechQueueRef.current = null
       if (speechControllerRef.current === speechController) speechControllerRef.current = null
       if (speechPlayerRef.current === clausePlayer) speechPlayerRef.current = null
     }
   }
 
-  const speakLastReply = async () => {
-    const reply = [...messages].reverse().find(item => item.role === 'assistant' && item.content?.trim())
-    if (!reply || !replyCharacter || !replyModel || replySpeechProblem || speaking || sending || capturing) return
+  const speakLastReply = (target = null) => {
+    const reply = target || [...messages].reverse().find(item => item.role === 'assistant' && item.content?.trim())
+    return speakReply(reply)
+  }
+
+  // Remember which audio was spoken for a reply, so its play button can replay it later.
+  const rememberAudio = async (sessionId, link) => {
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      try {
+        const saved = await linkMessageAudio(sessionId, link)
+        if (!aliveRef.current || activeSessionIdRef.current !== sessionId) return
+        setMessages(current => {
+          const offset = sessionOffsetRef.current
+          return current.map((msg, i) => i + offset === saved.index ? { ...msg, audio: saved.audio } : msg)
+        })
+        return
+      } catch (cause) {
+        if (!/still writing|409/.test(String(cause?.message))) return   // nothing to retry; replay just won't be offered
+        await new Promise(resolve => setTimeout(resolve, 3000))
+      }
+    }
+  }
+
+  const speakReply = async (reply) => {
+    const voice = voiceForReply(reply)
+    if (!reply || !voice.character || !voice.model || voice.problem || speaking || sending || capturing) return
+    const replyIndex = messages.indexOf(reply)
+    const sessionAtStart = session?.id
+    const absoluteIndex = replyIndex >= 0 ? replyIndex + (session?.messages_offset || 0) : null
+    const replyCharacter = voice.character
     const voiceProfile = replyCharacter.profile
     const voiceSettings = voiceProfile.voice_settings || {}
     const voiceModelId = voiceSettings.model_id
-    const voiceMode = voiceSettings.speech_mode === 'reference' ? 'reference' : 'description'
-    const voiceReferenceId = voiceSettings.reference_id || ''
-    const voiceEngine = ttsEngines.find(item => item.id === replyModel.engine_id)
-    const voiceCapabilities = voiceEngine?.capabilities || {}
+    const voiceMode = voice.mode
+    const voiceReferenceId = voice.referenceId
+    const voiceCapabilities = voice.capabilities
     const identity = ++requestIdentityRef.current
     setSpeaking(true)
     setError('')
@@ -1016,8 +1089,10 @@ export default function Converse({ sceneCreation = false }) {
       if (voiceMode === 'reference' && !voiceCapabilities.reference_audio) throw new Error('This character’s saved reference voice mode is unavailable.')
       if (voiceMode === 'description' && !voiceCapabilities.voice_description && voiceCapabilities.reference_audio) throw new Error('This character’s saved description voice mode is unavailable.')
       if (voiceMode === 'reference' && (!voiceReferenceId || !references.some(item => item.reference_id === voiceReferenceId))) throw new Error('This character’s saved reference clip is unavailable. Choose another clip in the character profile.')
+      const snapshotForReply = speechSnapshot(replyCharacter, speechCatalogRef.current)
       const body = {
-        ...speechSnapshot(replyCharacter, speechCatalogRef.current).body,
+        ...snapshotForReply.body,
+        pacing: snapshotForReply.pacing,
         text: speechText,
         delivery: reply.delivery || voiceSettings.delivery || { emotion: 'neutral', style: 'natural', expression: null },
       }
@@ -1042,6 +1117,7 @@ export default function Converse({ sceneCreation = false }) {
           await player.finish()
           if (!aliveRef.current || identity !== requestIdentityRef.current) return
           setAudioResult(result)
+          if (result?.file && sessionAtStart && absoluteIndex !== null) rememberAudio(sessionAtStart, { files: [result.file], index: absoluteIndex })
           if (result.meta?.truncated) setNotice('The voice model reached its generation limit. The saved audio may be incomplete.')
         } finally {
           player.stop()
@@ -1053,6 +1129,7 @@ export default function Converse({ sceneCreation = false }) {
       const result = await synthesize(body)
       if (!aliveRef.current || identity !== requestIdentityRef.current) return
       setAudioResult(result)
+      if (result?.file && sessionAtStart && absoluteIndex !== null) rememberAudio(sessionAtStart, { files: [result.file], index: absoluteIndex })
       if (result.meta?.delivery_warnings?.length) setNotice(result.meta.delivery_warnings.join(' '))
       requestAnimationFrame(() => {
         if (!aliveRef.current || identity !== requestIdentityRef.current || !audioRef.current) return
@@ -1268,7 +1345,11 @@ export default function Converse({ sceneCreation = false }) {
               return <div key={`${index}-${message.role}`} className={`flex items-start gap-2 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {characterReply && <CharacterAvatar name={speakerName} imageUrl={speakerProfile?.portrait_override_url || speakerProfile?.image_url} size={32} />}
                 <div className={`min-w-0 ${characterReply ? 'max-w-[calc(100%-3rem)]' : 'max-w-[88%]'} rounded-2xl px-4 py-3 ${message.role === 'user' ? 'bg-vault-accent/20 border border-vault-accent/25 text-vault-text rounded-br-md' : 'bg-vault-elevated border border-vault-border text-vault-text rounded-bl-md'}`}>
-                  <div className="text-[10px] font-mono text-vault-muted mb-1">{message.role === 'user' ? (message.persona_name ? message.persona_name.toUpperCase() : 'YOU') : characterReply ? speakerName.toUpperCase() : 'ASSISTANT'}{message.role === 'assistant' && message.status && message.status !== 'complete' && <span className="ml-2 text-amber-300">{message.status === 'interrupted' ? 'PARTIAL · INTERRUPTED' : message.status.toUpperCase()}</span>}</div>
+                  <div className="text-[10px] font-mono text-vault-muted mb-1">{message.role === 'user' ? (message.persona_name ? message.persona_name.toUpperCase() : 'YOU') : characterReply ? speakerName.toUpperCase() : 'ASSISTANT'}{message.role === 'assistant' && message.status && message.status !== 'complete' && <span className="ml-2 text-amber-300">{message.status === 'interrupted' ? 'PARTIAL · INTERRUPTED' : message.status.toUpperCase()}</span>}
+                    {message.role === 'assistant' && message.content?.trim() && !(sending && index === messages.length - 1) && <span className="float-right -mt-0.5 ml-2"><ReplayButton message={message}
+                      onSpeak={message.audio?.length || !voiceForReply(message).problem ? speakReply : null} busy={speaking}
+                      speakProblem={voiceForReply(message).problem}
+                      disabled={sending || capturing} /></span>}</div>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{message.content || (sending && index === messages.length - 1 ? <span className="inline-flex items-center gap-2 text-vault-muted"><Loader2 size={13} className="animate-spin" />Thinking…</span> : '')}</p>
                 </div>
                 {message.role === 'user' && message.persona_name && <CharacterAvatar name={message.persona_name} imageUrl={message.persona_avatar_url} size={32} />}
@@ -1379,6 +1460,12 @@ export default function Converse({ sceneCreation = false }) {
               {(capabilities.supported_generation_controls || []).length > 0 && <details className="text-[11px] text-vault-muted"><summary className="cursor-pointer">Voice generation settings</summary><div className="grid grid-cols-2 gap-2 mt-2">{[
                 ['temperature', 0.1, 2, 0.05], ['top_p', 0.1, 1, 0.05], ['repetition_penalty', 1, 2, 0.05], ['max_new_tokens', 100, 16000, 100], ['seed', 0, 4294967295, 1],
               ].filter(([key]) => capabilities.supported_generation_controls.includes(key)).map(([key, min, max, step]) => <label key={key} className="flex flex-col gap-1"><span>{key}</span><input aria-label={`Voice ${key}`} type="number" min={min} max={max} step={step} value={profile.voice_settings?.generation?.[key] ?? DEFAULT_GENERATION[key]} onChange={e => updateVoiceField('generation', { ...DEFAULT_GENERATION, ...profile.voice_settings?.generation, [key]: Number(e.target.value) })} disabled={sending || saving || creating} className="w-full bg-vault-elevated border border-vault-border rounded px-2 py-1 text-xs text-vault-text" /></label>)}</div></details>}
+              <label className="flex flex-col gap-1"><span className="text-[11px] text-vault-muted">Pace between sentences</span>
+                <select aria-label="Pace between sentences" value={profile.voice_settings?.pacing || 'natural'} disabled={sending || saving || creating}
+                  onChange={e => updateVoiceField('pacing', e.target.value === 'natural' ? null : e.target.value)}
+                  className="w-full bg-vault-elevated border border-vault-border rounded-lg px-3 py-2 text-xs text-vault-text">
+                  {[['natural', 'Natural (as spoken)'], ['relaxed', 'Relaxed'], ['dramatic', 'Dramatic']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select></label>
               <DeliveryControls capabilities={capabilities} referenceMode={speechMode === 'reference'} value={delivery}
                 disabled={sending || saving || creating} onChange={updater => {
                   const next = typeof updater === 'function' ? updater(delivery) : updater
@@ -1390,7 +1477,7 @@ export default function Converse({ sceneCreation = false }) {
               {sceneCreation && <label className="flex gap-2 items-start text-[11px] text-vault-muted"><input type="checkbox" checked={autoSpeak} onChange={event => setAutoSpeak(event.target.checked)} disabled={sending || saving || speaking} />Speak while replying</label>}
               <p className="text-[10px] leading-relaxed text-vault-muted">Spoken replies use the saved speaker’s voice across bounded sentences, up to 32 segments / 8,000 characters. Unsupported suggestions are omitted with a notice. Complete-output engines finish each sentence before its audio arrives.</p>
               {currentAssistant && <p role={replySpeechProblem ? 'status' : undefined} className={`text-[10px] leading-relaxed ${replySpeechProblem ? 'text-amber-200' : 'text-vault-muted'}`}>{replySpeechProblem || (sceneCreation || roleplay ? `Speak latest reply uses ${replyCharacter?.profile.name || 'the character'}’s saved voice.` : 'Replay uses this reply’s saved voice settings.')}</p>}
-              <button type="button" onClick={speaking ? stopSpeech : speakLastReply} disabled={!speaking && (!currentAssistant || sending || capturing || !!replySpeechProblem || !replyModel)} className="vault-btn-ghost inline-flex items-center gap-2 justify-center px-3 py-2 text-xs disabled:opacity-40">{speaking ? <Square size={12} /> : <Volume2 size={13} />}{speaking ? 'Stop speech request' : 'Speak latest reply'}</button>
+              <button type="button" onClick={speaking ? stopSpeech : () => speakLastReply()} disabled={!speaking && (!currentAssistant || sending || capturing || !!replySpeechProblem || !replyModel)} className="vault-btn-ghost inline-flex items-center gap-2 justify-center px-3 py-2 text-xs disabled:opacity-40">{speaking ? <Square size={12} /> : <Volume2 size={13} />}{speaking ? 'Stop speech request' : 'Speak latest reply'}</button>
               <p className="text-[10px] leading-relaxed text-vault-muted">Marked actions such as *smiles* and bracketed stage directions are skipped. Playback, mute, and replay use the audio controls.</p>
               {audioResult && <div className="flex flex-col gap-2"><audio ref={audioRef} key={audioResult.id || audioResult.url} controls src={audioUrl(audioResult.url)} className="w-full" onPlay={() => setAudioPlaying(true)} onPause={() => setAudioPlaying(false)} onEnded={() => setAudioPlaying(false)} /><div className="flex items-center justify-between"><span className="text-[10px] text-vault-muted">Replay with the audio controls.</span><button type="button" onClick={() => { stopAudio(); setAudioResult(null) }} className="inline-flex items-center gap-1 text-[10px] text-vault-muted hover:text-vault-text"><VolumeX size={12} /> Stop / clear</button></div></div>}
               {speechTiming?.firstAudioMs != null && <p role="status" className="text-[10px] font-mono text-vault-muted">First audio queued: {(speechTiming.firstAudioMs / 1000).toFixed(2)} s · {speechSegments.length} saved segments</p>}

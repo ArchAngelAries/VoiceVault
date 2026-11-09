@@ -88,7 +88,8 @@ def main() -> None:
                 from models import drama_convert
                 opts = spec.get("options") or {}
                 files += drama_convert.run(models_dir, src["dest"], spec.get("token"), bool(opts.get("also_max")),
-                                           bool(opts.get("keep_checkpoint")), lambda m: print("STAGE " + m, flush=True))
+                                           bool(opts.get("keep_checkpoint")), lambda m: print("STAGE " + m, flush=True),
+                                           levels=opts.get("levels"))
             else:
                 raise RuntimeError(f"Source kind {kind} can't be downloaded automatically.")
         print("RESULT " + json.dumps({"ok": True, "files": files}), flush=True)

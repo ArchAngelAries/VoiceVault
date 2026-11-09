@@ -76,13 +76,14 @@ class VoiceSettings(BaseModel):
     reference_text: str | None = Field(None, max_length=2000)
     language: str | None = Field(None, max_length=40)
     generation: VoiceGeneration | None = None
+    pacing: Literal["tight", "natural", "relaxed", "dramatic"] | None = None   # silence between spoken sentences
 
     @model_serializer(mode="wrap")
     def serialize(self, handler):
         value = handler(self)
         if self.delivery is None:
             value.pop("delivery", None)
-        for key in ("engine_id", "reference_text", "language", "generation"):
+        for key in ("engine_id", "reference_text", "language", "generation", "pacing"):
             if getattr(self, key) is None:
                 value.pop(key, None)
         return value
@@ -589,6 +590,88 @@ async def get_messages(session_id: str, before: int, limit: int = 200):
     before = max(0, min(before, len(messages)))
     start = max(0, before - max(1, min(limit, 1000)))
     return {"messages": messages[start:before], "offset": start, "total": len(messages)}
+
+
+class MessageAudio(BaseModel):
+    """Link spoken audio to a reply so it can be replayed later.
+
+    Give the message's position (`index`, counted from the start of the chat), or let the backend find
+    the latest reply by this speaker that contains `text` (the first spoken sentence), which is how a
+    live reply is matched after its speech finishes.
+    """
+    model_config = {"extra": "forbid"}
+    files: list[str] = Field(min_length=1, max_length=64)
+    index: int | None = Field(None, ge=0)
+    speaker_id: str | None = Field(None, max_length=80)
+    text: str | None = Field(None, max_length=4000)
+
+
+def _squash_text(text: str) -> str:
+    return " ".join("".join(ch.lower() if ch.isalnum() else " " for ch in (text or "")).split())
+
+
+def _spoken_only(text: str) -> str:
+    """The reply as speech hears it: *actions*, (asides) and [cues] removed, like the chat's speech filter."""
+    import re
+    text = re.sub(r"\*[^*]*\*", " ", text or "")
+    text = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", text)
+    return _squash_text(text)
+
+
+def _owned_audio(names: list[str]) -> list[dict]:
+    """Only generations VoiceVault wrote itself (a WAV plus its record) can be linked: names, never paths."""
+    from api.tts import _outputs_dir
+    from engines import audio_store
+    outputs = _outputs_dir()
+    linked = []
+    for name in names:
+        if not isinstance(name, str) or not audio_store.is_valid_audio_name(name) \
+                or audio_store._generation_files(outputs, name) is None:
+            raise HTTPException(422, "One of the audio files isn't a VoiceVault generation.")
+        try:
+            record = json.loads((outputs / f"{Path(name).stem}.json").read_text(encoding="utf-8"))
+            duration = record.get("duration_s")
+        except (OSError, ValueError):
+            duration = None
+        linked.append({"file": name, **({"duration_s": duration} if isinstance(duration, (int, float)) else {})})
+    return linked
+
+
+@router.post("/sessions/{session_id}/audio")
+async def link_message_audio(session_id: str, body: MessageAudio):
+    """Remember which audio was spoken for a reply (replaces any earlier link for that reply)."""
+    path = _session_path(session_id)
+    session_id = path.stem
+    linked = _owned_audio(body.files)
+    async with _turn_guard:
+        if session_id in _active_turns:
+            raise HTTPException(409, "This conversation is still writing a reply; try again when it finishes.")
+        session = _read(path)
+        messages = session.get("messages", [])
+        target = None
+        if body.index is not None:
+            if body.index >= len(messages) or messages[body.index].get("role") != "assistant":
+                raise HTTPException(404, "That reply was not found.")
+            target = body.index
+        else:
+            probe = _squash_text(body.text or "")[:200]
+            if not probe:
+                raise HTTPException(422, "Give the reply's position or its first spoken sentence.")
+            for i in range(len(messages) - 1, max(-1, len(messages) - 61), -1):
+                message = messages[i]
+                if message.get("role") != "assistant":
+                    continue
+                if body.speaker_id and message.get("speaker_id", "primary") != body.speaker_id:
+                    continue
+                content = message.get("content", "")
+                if probe in _squash_text(content) or probe in _spoken_only(content):
+                    target = i
+                    break
+            if target is None:
+                raise HTTPException(404, "No recent reply matches that text.")
+        messages[target]["audio"] = linked
+        _save(session)
+    return {"index": target, "audio": linked}
 
 
 @router.get("/memory/search")

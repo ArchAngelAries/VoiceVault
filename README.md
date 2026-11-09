@@ -73,7 +73,7 @@ Built-in guides explain every page: press **Guide** at the top right of any page
 
 **Tested hardware:**
 - **AMD Radeon RX 7900 XT (20 GB)**, using Vulkan and ROCm. This is the only setup tested by the author.
-- **NVIDIA** cards and **CPU-only** PCs are community-tested: they should work, but the author can't verify them. Reports are welcome: [open an issue](https://github.com/ArchAngelAries/VoiceVault/issues).
+- **NVIDIA** cards (driver 570 or newer recommended; older drivers get CUDA 12.6) and **CPU-only** PCs are community-tested: they should work, but the author can't verify them. Reports are welcome: [open an issue](https://github.com/ArchAngelAries/VoiceVault/issues).
 - Linux and macOS are not supported.
 
 ## Install (Windows installer)
@@ -151,6 +151,7 @@ VoiceVault is a tool. You are responsible for what you create with it and must f
 - [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md) — connecting AI agents (MCP)
 - [docs/CHAT_MEMORY.md](docs/CHAT_MEMORY.md) — how long-term chat memory works
 - [docs/CAST.md](docs/CAST.md) — the Cast, Craft with AI and how personas are checked
+- [docs/QUANTIZATION.md](docs/QUANTIZATION.md) — Drama 3 sizes and what smaller sizes cost in quality
 - [docs/VOICE_LAB.md](docs/VOICE_LAB.md), [docs/HARVEST_CLEANING.md](docs/HARVEST_CLEANING.md), [docs/MUSIC_STUDIO.md](docs/MUSIC_STUDIO.md) — feature details
 
 ## Support VoiceVault

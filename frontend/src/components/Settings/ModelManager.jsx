@@ -11,6 +11,7 @@ import clsx from 'clsx'
 import api from '@/api/client'
 import { SettingsSection, SettingsField, PasswordInput } from '@/components/Settings/SettingsField'
 import { reopenSetup } from '@/components/common/FirstRunWizard'
+import DramaSizes, { sizesReady } from '@/components/Settings/DramaSizes'
 
 const TASK_ORDER = ['Speech', 'Live chat voice', 'Speech recognition', 'Music', 'Analysis', 'Cleaning', 'Voice Lab', 'Runtime']
 const COMMERCIAL = {
@@ -29,7 +30,9 @@ const errText = (e) => e?.response?.data?.detail || e?.message || 'Something wen
 
 function Item({ item, onDownload, onCancel, onRemove }) {
   const [confirm, setConfirm] = useState(false)
-  const [alsoMax, setAlsoMax] = useState(false)
+  const [levels, setLevels] = useState([])        // Drama 3: extra sizes to build (Q4 is always built)
+  const [keepOriginal, setKeepOriginal] = useState(false)
+  const [qualityAck, setQualityAck] = useState(false)
   const job = item.job
   const converts = item.sources.some(s => s.kind === 'drama_convert')
   const [commercialText, commercialCls] = COMMERCIAL[item.commercial] || ['Licence: check the model card', 'text-vault-muted border-vault-border']
@@ -55,6 +58,9 @@ function Item({ item, onDownload, onCancel, onRemove }) {
             confirm ? null : <button type="button" onClick={() => (item.accepted && !converts) ? onDownload(item.id, false, {}) : setConfirm(true)}
               className="vault-btn-primary inline-flex items-center gap-1 px-2.5 py-1 text-[11px]"><Download size={12} />{converts ? 'Download and convert' : 'Download'}</button>
           ) : null}
+          {item.installed && converts && item.sizes && !job && !confirm && (
+            <button type="button" onClick={() => setConfirm(true)} className="vault-btn-ghost inline-flex items-center gap-1 px-2 py-1 text-[11px]">Build other sizes</button>
+          )}
           {item.installed && item.owned && !job && (
             <button type="button" onClick={() => onRemove(item.id)} title="Delete the copy VoiceVault downloaded"
               className="text-vault-muted hover:text-red-300 p-1"><Trash2 size={13} /></button>
@@ -83,14 +89,15 @@ function Item({ item, onDownload, onCancel, onRemove }) {
           {converts && (
             <>
               <ul className="list-disc pl-4 font-body text-[11px] text-vault-muted flex flex-col gap-0.5">{item.sources[0].steps.map(st => <li key={st}>{st}</li>)}</ul>
-              <label className="inline-flex items-center gap-2 font-body text-xs text-vault-text">
-                <input type="checkbox" checked={alsoMax} onChange={e => setAlsoMax(e.target.checked)} />
-                Also build the Max quality (Q6) version: about 34 GB more, slower voice
-              </label>
+              {item.sizes && <DramaSizes sizes={item.sizes} value={levels} onChange={setLevels} keep={keepOriginal} onKeep={setKeepOriginal}
+                ack={qualityAck} onAck={setQualityAck} />}
             </>
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={() => { setConfirm(false); onDownload(item.id, true, converts ? { also_max: alsoMax } : {}) }} className="vault-btn-primary px-2.5 py-1 text-[11px]">I accept the licence, {converts ? 'download and convert' : 'download'}</button>
+            <button type="button" disabled={converts && (!sizesReady(item.sizes, levels, qualityAck)
+                || (item.installed && !(item.sizes?.levels || []).some(l => levels.includes(l.id) && !l.built)))}
+              onClick={() => { setConfirm(false); onDownload(item.id, true, converts ? { levels, keep_checkpoint: keepOriginal, acknowledge_lower_quality: qualityAck } : {}) }}
+              className="vault-btn-primary px-2.5 py-1 text-[11px] disabled:opacity-40">I accept the licence, {converts ? (item.installed ? 'build the chosen sizes' : 'download and convert') : 'download'}</button>
             <button type="button" onClick={() => setConfirm(false)} className="vault-btn-ghost px-2.5 py-1 text-[11px]">Cancel</button>
           </div>
         </div>

@@ -45,8 +45,47 @@ SIDE_FILES = ("config.json", "tokenizer.json", "tokenizer_config.json", "special
               "chat_template.jinja")
 
 
-def disk_needed(also_max: bool) -> int:
-    return CHECKPOINT_BYTES + INTERMEDIATE_BYTES + Q4_BYTES + (Q6_BYTES if also_max else 0) + 5_000_000_000
+# Sizes the user can build. All use the same proven conversion method (routers, gates and speech head kept
+# at full precision, only the routed experts change). Q4 and Q6 have been built and listened to on the
+# project's test PC; the others haven't, and the app says so. Smaller levels can lose quality.
+LEVELS: dict[str, dict] = {
+    "q2_k": {"label": "Q2", "bytes": 17_100_000_000, "tested": False, "warning": True,
+             "note": "Smallest. Quality loss is likely: voices can sound flat, less like the reference, or garbled. Same proven method as Q4 and Q6; not yet tested on our test PC."},
+    "q3_k": {"label": "Q3", "bytes": 20_600_000_000, "tested": False, "warning": True,
+             "note": "Smaller, for 8–12 GB graphics cards. Some quality loss is likely. Same proven method as Q4 and Q6; not yet tested on our test PC."},
+    "q4_k": {"label": "Q4", "bytes": Q4_BYTES, "tested": True, "warning": False,
+             "note": "Recommended. Built and listened to on our test PC: close to the original."},
+    "q5_k": {"label": "Q5", "bytes": 29_400_000_000, "tested": False, "warning": False,
+             "note": "Between Q4 and Q6. Same proven method as Q4 and Q6; not yet tested on our test PC."},
+    "q6_k": {"label": "Q6", "bytes": Q6_BYTES, "tested": True, "warning": False,
+             "note": "Max quality; built and listened to on our test PC. Slower voice."},
+    "q8_0": {"label": "Q8", "bytes": 42_200_000_000, "tested": False, "warning": False,
+             "note": "Closest to the original; largest and slowest. Same proven method as Q4 and Q6; not yet tested on our test PC."},
+}
+DEFAULT_LEVELS = ["q4_k"]
+
+
+def level_name(level: str) -> str:
+    if level == "q4_k":
+        return Q4_NAME
+    if level == "q6_k":
+        return Q6_NAME
+    tag = {"q2_k": "Q2_K", "q3_k": "Q3_K", "q5_k": "Q5_K", "q8_0": "Q8_0"}[level]
+    return f"drama-3-final-experts-{tag}-backbone-Q8_0-embed-F16-routers-head-F16.gguf"
+
+
+def clean_levels(levels, also_max: bool = False) -> list[str]:
+    """Q4 is always built (it's the default package); add the chosen extra sizes, in a fixed order."""
+    chosen = set(DEFAULT_LEVELS) | {lv for lv in (levels or []) if lv in LEVELS}
+    if also_max:
+        chosen.add("q6_k")
+    return [lv for lv in LEVELS if lv in chosen]
+
+
+def disk_needed(also_max: bool = False, levels=None, have_checkpoint: bool = False) -> int:
+    chosen = clean_levels(levels, also_max)
+    return ((0 if have_checkpoint else CHECKPOINT_BYTES) + INTERMEDIATE_BYTES
+            + sum(LEVELS[lv]["bytes"] for lv in chosen) + 5_000_000_000)
 
 
 def _fetch(url: str, sha256: str) -> bytes:
@@ -87,6 +126,11 @@ def download_checkpoint(work: Path, token, say: Callable[[str], None]) -> Path:
 
 
 def q6_command(tool: Path, intermediate: Path, out: Path, checkpoint: Path, spec: Path) -> list[str]:
+    return level_command(tool, intermediate, out, checkpoint, spec, "q6_k")
+
+
+def level_command(tool: Path, intermediate: Path, out: Path, checkpoint: Path, spec: Path, level: str) -> list[str]:
+    """Routed experts at `level`; routers, gates and the speech head stay at full precision (the verified Q6 recipe)."""
     cmd = [str(tool), "--input", str(intermediate), "--output", str(out), "--type", "q8_0", "--family", "fish_drama3",
            "--model-spec", str(spec), "--root", str(checkpoint),
            "--fold-weight-norm", "codec_weights*", "--keep-type", "codec_weights*=f16",
@@ -94,7 +138,7 @@ def q6_command(tool: Path, intermediate: Path, out: Path, checkpoint: Path, spec
            "--keep-type", "model_weights/model.language_model.embed_tokens.weight=f16",
            "--keep-type", "model_weights/lm_head.weight*=orig"]
     for i in range(40):
-        cmd += ["--keep-type", f"model_weights/model.language_model.layers.{i}.mlp.experts.*=q6_k",
+        cmd += ["--keep-type", f"model_weights/model.language_model.layers.{i}.mlp.experts.*={level}",
                 "--keep-type", f"model_weights/model.language_model.layers.{i}.mlp.gate.weight*=orig",
                 "--keep-type", f"model_weights/model.language_model.layers.{i}.mlp.shared_expert_gate.weight*=orig"]
     for name in SIDE_FILES:
@@ -115,7 +159,11 @@ text embedding F16; codec weight norm folded (F16).
 
 
 def run(models_dir: Path, dest: str, token, also_max: bool, keep_checkpoint: bool,
-        say: Callable[[str], None]) -> list[str]:
+        say: Callable[[str], None], levels=None) -> list[str]:
+    levels = clean_levels(levels, also_max)
+    if all((models_dir / dest / level_name(lv)).is_file() for lv in levels):
+        say("Every chosen size is built already; nothing to do.")
+        return [str(models_dir / dest / level_name(lv)) for lv in levels]
     from engines.audiocpp_server import find_server_executable
 
     exe = find_server_executable("")
@@ -127,7 +175,8 @@ def run(models_dir: Path, dest: str, token, also_max: bool, keep_checkpoint: boo
     out_dir.mkdir(parents=True, exist_ok=True)
     work = models_dir / ".drama3-work"
     free = shutil.disk_usage(models_dir).free
-    need = disk_needed(also_max) - sum(f.stat().st_size for f in work.rglob("*") if f.is_file()) if work.exists() else disk_needed(also_max)
+    need = disk_needed(levels=levels) - sum(f.stat().st_size for f in work.rglob("*") if f.is_file()) if work.exists() else disk_needed(levels=levels)
+    need -= sum((out_dir / level_name(lv)).stat().st_size for lv in levels if (out_dir / level_name(lv)).is_file())
     if free < need:
         raise RuntimeError(f"Not enough disk space: converting needs about {need / 1e9:.0f} GB free, {free / 1e9:.0f} GB available.")
     conv, pylib = prepare_tools(work, say)
@@ -146,21 +195,34 @@ def run(models_dir: Path, dest: str, token, also_max: bool, keep_checkpoint: boo
         if r.returncode != 0 or not q4.is_file():
             raise RuntimeError(f"The Drama 3 converter stopped (exit {r.returncode}). Start again to retry; finished steps are kept.")
     files.append(str(q4))
-    if also_max:
-        q6 = out_dir / Q6_NAME
-        if not q6.is_file():
-            say("Step 4/5: building the Max quality (Q6) package…")
-            r = subprocess.run(q6_command(tool, intermediate, q6, checkpoint, spec),
+    extra = [lv for lv in levels if lv != "q4_k" and not (out_dir / level_name(lv)).is_file()]
+    if extra and not intermediate.is_file():
+        # Q4 already exists, so make the full-precision intermediate again (Q4 output goes to a scratch file).
+        say("Preparing the full-precision intermediate for the other sizes (CPU; this takes a while)…")
+        scratch = work / "q4-scratch.gguf"
+        args = [sys.executable, "-u", str(conv), "--checkpoint", str(checkpoint), "--quantized-output", str(scratch),
+                "--gguf-tool", str(tool), "--expert-type", "q4_k", "--backbone-type", "q8_0", "--embedding-type", "f16",
+                "--threads", str(max(2, os.cpu_count() or 4)), "--output", str(intermediate)]
+        env = {**os.environ, "PYTHONPATH": str(pylib) + os.pathsep + os.environ.get("PYTHONPATH", "")}
+        r = subprocess.run(args, env=env, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        scratch.unlink(missing_ok=True)
+        if r.returncode != 0 or not intermediate.is_file():
+            raise RuntimeError(f"The Drama 3 converter stopped (exit {r.returncode}). Start again to retry; finished steps are kept.")
+    for lv in [lv for lv in levels if lv != "q4_k"]:
+        out = out_dir / level_name(lv)
+        if not out.is_file():
+            say(f"Step 4/5: building the {LEVELS[lv]['label']} package…")
+            r = subprocess.run(level_command(tool, intermediate, out, checkpoint, spec, lv),
                                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-            if r.returncode != 0 or not q6.is_file():
-                raise RuntimeError(f"Building the Q6 package stopped (exit {r.returncode}). Start again to retry.")
-        files.append(str(q6))
+            if r.returncode != 0 or not out.is_file():
+                raise RuntimeError(f"Building the {LEVELS[lv]['label']} package stopped (exit {r.returncode}). Start again to retry.")
+        files.append(str(out))
     say("Step 5/5: writing licence notices and cleaning up temporary files…")
     if (checkpoint / "LICENSE").is_file():
         shutil.copyfile(checkpoint / "LICENSE", out_dir / "LICENSE")
         files.append(str(out_dir / "LICENSE"))
     (out_dir / "NOTICE").write_text(NOTICE.format(rev=CHECKPOINT_REVISION, commit=AUDIOCPP_COMMIT,
-                                                  experts="Q4_K" + (" and Q6_K" if also_max else "")), encoding="utf-8")
+                                                  experts=", ".join(LEVELS[lv]["label"] + "_K" if lv != "q8_0" else "Q8_0" for lv in levels)), encoding="utf-8")
     files.append(str(out_dir / "NOTICE"))
     intermediate.unlink(missing_ok=True)
     if not keep_checkpoint:

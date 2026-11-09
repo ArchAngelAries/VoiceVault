@@ -28,6 +28,8 @@ const USABLE_STATES = ['integrated', 'tested']
 const MAYA1_DESCRIPTION = ENGINE_GUIDES.maya1.examples[0].text
 const DEFAULT_TEXT = 'Hello! This is VoiceVault speaking from my own GPU.'
 const DEFAULT_ADVANCED = { temperature: 0.4, top_p: 0.9, repetition_penalty: 1.1, max_new_tokens: 4000, seed: 0 }
+const PACE_OPTIONS = [['tight', 'Tight'], ['natural', 'Natural (as spoken)'], ['relaxed', 'Relaxed'], ['dramatic', 'Dramatic']]
+const PACING_TAG = /\[(\/?)(pause|slow|fast|speed)\b/i
 const LAST_CHOICE_KEY = 'vv.generate.last'           // { engineId, modelId, description, referenceId, referenceText }
 // The preferred first-run choice: Drama 3 final weights, Q4 experts (best quality-to-speed build).
 const isRecommendedDrama = m => m.engine_id === 'fish_drama3' && /Drama-3-GGUF-final/.test(m.id) && /Q4_K/.test(m.id)
@@ -72,6 +74,7 @@ export default function Generate() {
   const [engineId, setEngineId]       = useState('')
   const [modelId, setModelId]         = useState('')
   const [text, setText]               = useState(DEFAULT_TEXT)
+  const [pace, setPace]               = useState('natural')   // silence between sentences; pacing tags work in the text
   const [description, setDescription] = useState(MAYA1_DESCRIPTION)
   const [language, setLanguage]       = useState('')
   const [reference, setReference]     = useState(null)      // { id, name, duration_s }
@@ -312,6 +315,7 @@ export default function Generate() {
           expression: deliveryOptions.expressions.includes(delivery.expression) ? delivery.expression : null,
         },
         ...Object.fromEntries(supportedControls.map(key => [key, generation[key]])),
+        pacing: extraVoices.length ? 'natural' : pace,
       })
       setResult(rec)
       setLoadedModelId(modelId)
@@ -450,6 +454,16 @@ export default function Generate() {
               className="bg-vault-elevated border border-vault-border rounded-lg px-3 py-2 font-body text-base text-vault-text resize-y" />
             <span className="font-mono text-[10px] text-vault-muted text-right">{text.length} / 5000</span>
           </label>
+          <div className="flex flex-wrap items-center gap-3 -mt-2">
+            <label className="flex items-center gap-2 font-body text-[11px] text-vault-muted">Pace
+              <select aria-label="Pace between sentences" value={extraVoices.length ? 'natural' : pace} disabled={extraVoices.length > 0}
+                title={extraVoices.length ? 'Pace works with one voice at a time' : undefined} onChange={e => setPace(e.target.value)}
+                className="bg-vault-elevated border border-vault-border rounded-md px-2 py-1 text-[11px] text-vault-text">
+                {PACE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+            <span className="font-body text-[11px] text-vault-muted">Tags: <span className="font-mono">[pause 0.8s]</span> exact silence ·
+              <span className="font-mono"> [slow]…[/slow]</span> · <span className="font-mono">[fast]…[/fast]</span> ·
+              <span className="font-mono"> [speed 0.7]…[/speed]</span>{PACING_TAG.test(text) && extraVoices.length ? <span className="text-amber-200"> (not with several voices)</span> : null}</span>
+          </div>
 
           {tagsAllowed && caps?.emotion_tags?.length > 0 && (
             <div className="flex flex-col gap-1.5 -mt-2">

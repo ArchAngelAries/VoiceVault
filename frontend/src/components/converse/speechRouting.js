@@ -3,6 +3,10 @@ import { DEFAULT_GENERATION } from '../../lib/savedVoicePreset.js'
 const USABLE = new Set(['integrated', 'tested'])
 
 /** Capture one saved speaker's exact voice once, before starting any clauses. */
+export const PACES = ['tight', 'natural', 'relaxed', 'dramatic']
+// Extra silence between spoken sentences in live chat, per pace (natural = as the voice speaks).
+export const PACE_GAP_SECONDS = { tight: 0, natural: 0, relaxed: 0.35, dramatic: 0.75 }
+
 export function speechSnapshot(character, { models = [], engines = [], references = [] } = {}) {
   if (!character) throw new Error('This reply’s character is no longer in the roster.')
   const profile = character.profile || {}
@@ -29,6 +33,7 @@ export function speechSnapshot(character, { models = [], engines = [], reference
     ...Object.fromEntries((caps.supported_generation_controls || []).map(key => [key, { ...DEFAULT_GENERATION, ...settings.generation }[key]])),
     delivery,
   })
-  return Object.freeze({ speakerId: character.id, speakerName: profile.name || 'Character', body })
+  return Object.freeze({ speakerId: character.id, speakerName: profile.name || 'Character', body,
+    pacing: PACES.includes(settings.pacing) ? settings.pacing : 'natural' })
 }
 

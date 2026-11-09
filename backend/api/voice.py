@@ -74,6 +74,8 @@ class ShapeIn(BaseModel):
     advanced: dict[str, Any] = Field(default_factory=dict)
     effects: list[dict[str, Any]] = Field(default_factory=list, max_length=24)
     seed: int = 0
+    shape_strength: float = Field(default=1.0, ge=0.0, le=2.0)     # 0 = original voice, 1 = as set, 2 = double
+    effects_strength: float = Field(default=1.0, ge=0.0, le=2.0)   # how much of the effects chain is heard
 
 
 class ConvertIn(ShapeIn):
@@ -145,8 +147,9 @@ def _store_preview(audio: np.ndarray, rate: int, meta: dict) -> dict:
 
 def _shape_audio(audio, rate, key, body: ShapeIn) -> tuple[np.ndarray, dict]:
     try:
-        out, meta = shaper.shape(audio, rate, body.simple, body.advanced, key=key, seed=body.seed)
-        out = fx.apply_chain(out, rate, body.effects)
+        out, meta = shaper.shape(audio, rate, body.simple, body.advanced, key=key, seed=body.seed,
+                                 strength=body.shape_strength)
+        out = fx.apply_chain(out, rate, body.effects, strength=body.effects_strength)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     return out, meta
@@ -220,7 +223,8 @@ async def shape_voice(body: ShapeIn):
     t = time.time()
     out, meta = await asyncio.to_thread(_shape_audio, audio, rate, key, body)
     meta = {**meta, "seconds": round(time.time() - t, 2), "source": body.source.model_dump(),
-            "simple": body.simple, "advanced": body.advanced, "effects": body.effects}
+            "simple": body.simple, "advanced": body.advanced, "effects": body.effects,
+            "shape_strength": body.shape_strength, "effects_strength": body.effects_strength}
     return _store_preview(out, rate, meta)
 
 
@@ -294,7 +298,8 @@ async def convert_voice(body: ConvertIn):
         meta["enhance_error"] = "Kept the 22 kHz result: the 48 kHz restore step failed (" + enhance_error[:200] + ")."
     if body.simple or body.advanced or body.effects:
         mono, shaped = await asyncio.to_thread(_shape_audio, mono, crate, None, body)
-        meta.update(shaped, simple=body.simple, advanced=body.advanced, effects=body.effects)
+        meta.update(shaped, simple=body.simple, advanced=body.advanced, effects=body.effects,
+                    shape_strength=body.shape_strength, effects_strength=body.effects_strength)
     return _store_preview(mono, crate, meta)
 
 
@@ -322,7 +327,8 @@ async def save_preview(body: SaveIn):
         record = save_generation(_outputs_dir(), mono, rate, {
             "engine": "voice_lab", "model_id": "voice_lab", "model_family": "Voice Lab",
             "text": body.name, "voice_description": None, "reference_id": None,
-            "meta": {"voice_lab": {k: meta.get(k) for k in ("simple", "advanced", "effects", "params", "source",
+            "meta": {"voice_lab": {k: meta.get(k) for k in ("simple", "advanced", "effects", "shape_strength",
+                                                          "effects_strength", "params", "source",
                                                           "converted_with", "target_reference_id")}}})
         record["url"] = f"/api/tts/audio/{record['file']}"
         return record
@@ -336,6 +342,6 @@ async def save_preview(body: SaveIn):
     record = audio_store.save_reference(_voices(), low, 24000, body.name, high, 44100)
     ref_json = _voices() / f"{record['reference_id']}.json"
     saved = json.loads(ref_json.read_text(encoding="utf-8"))
-    saved.update({"transcript": (body.transcript or "").strip(), "voice_lab": {k: meta.get(k) for k in ("simple", "advanced", "effects", "source")}})
+    saved.update({"transcript": (body.transcript or "").strip(), "voice_lab": {k: meta.get(k) for k in ("simple", "advanced", "effects", "shape_strength", "effects_strength", "source")}})
     ref_json.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
     return saved

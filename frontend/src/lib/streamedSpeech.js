@@ -50,6 +50,12 @@ export class StreamedSpeechPlayer {
     return this
   }
 
+  /** Leave `seconds` of silence before the next queued audio (the pace between sentences). */
+  pause(seconds) {
+    if (!this.started || this.stopped || !(seconds > 0)) return
+    this.nextStartTime = Math.max(this.nextStartTime, this.context.currentTime) + Math.min(seconds, 5)
+  }
+
   async enqueue(payload) {
     if (!this.started) throw new Error('Start speech playback from a user action before enqueuing audio.')
     if (this.stopped) throw abortError()
