@@ -23,14 +23,15 @@ VoiceVault runs AI voice, music and chat models on your own PC. Your audio, voic
 
 ## What it does
 
-- **Generate** — turn text into speech in any voice. Clone a voice from a 10–30 second clip, or describe a new one in words. Multi-speaker scenes and emotion cues. The default engine is Fish Audio Drama 3.
-- **Voice Lab** — change a voice's age, pitch, gender and speed, add effects, or re-voice your own performance as another voice ("voice to voice").
+- **Generate** — turn text into speech in any voice. Clone a voice from a 10–30 second clip, or describe a new one in words. Multi-speaker scenes and emotion cues. **Pacing** works with every voice model: set the pace between sentences, or write `[pause 0.8s]`, `[slow]…[/slow]` and `[fast]…[/fast]` right in the text. The default engine is Fish Audio Drama 3.
+- **Voice Lab** — change a voice's age, pitch, gender and speed, add effects, or re-voice your own performance as another voice ("voice to voice"). **Strength** sliders dial any preset or effect from subtle to exaggerated.
 - **Harvest** — get a clean voice clip from a file or a public link. Remove music, isolate one speaker, remove noise and restore quality, then save it as a voice to clone.
 - **Music Studio** — write full songs from lyrics and a style, edit parts of a song, split it into stems, analyse tempo and key, and make **sound effects** from a text description. Every edit makes a new take, so nothing is lost.
-- **Converse and Scene Creation** — chat with AI characters, one-on-one or up to six at once, each speaking in their own voice. **Long-term memory** keeps long chats coherent, even with small local models. Pick **who you play** with your own personas and avatars.
+- **Converse and Scene Creation** — chat with AI characters, one-on-one or up to six at once, each speaking in their own voice. **Long-term memory** keeps long chats coherent, even with small local models. Pick **who you play** with your own personas and avatars, and **replay** any spoken reply.
 - **Cast** — set a character up once (portrait, persona, voice) and use them in any chat or scene. **Craft with AI** builds a lore-accurate persona for an established character from their Wikipedia article: every statement is checked against an exact quote, and anything unconfirmed is listed for you instead of being used. Or describe an idea and get an original character. **Voice auditions** design a voice to match, and Whisper flags garbled takes.
 - **Discover, Organize, Tier lists** — find shows, films, games and characters, save them, and rank them.
 - **Library** — every piece of audio in one searchable list.
+- **Models** — download each model from its official source, with its licence shown. Drama 3 is converted on your PC, and you choose its size (Q2 to Q8) to fit your graphics card; the app tells you plainly that smaller sizes can lose quality.
 - **Updates** — VoiceVault tells you when a new version is out, then downloads and installs it from inside the app when you click.
 - **AI-agent tools** — let an AI agent (a local model in LM Studio, Claude Desktop or any MCP client) speak lines, reshape voices, compose music and craft cast personas through VoiceVault. Agents can't delete or overwrite anything. See [docs/AGENT_MANUAL.md](docs/AGENT_MANUAL.md).
 
@@ -41,15 +42,15 @@ Built-in guides explain every page: press **Guide** at the top right of any page
 | | |
 |---|---|
 | ![Cast: a character with a lore-checked persona, sources and a voice](docs/screenshots/cast.jpg) | ![Converse: chatting as your own persona, with avatars on both sides](docs/screenshots/converse.jpg) |
-| **Cast:** a persona built from sources, each statement checked, with its voice auditioned. | **Converse:** chat as your own persona; characters remember, and every reply is spoken. |
+| **Cast:** a persona built from sources, each statement checked, with its voice auditioned. | **Converse:** chat as your own persona; characters remember, every reply is spoken, and any reply can be replayed or spoken again. |
 | ![Craft with AI: research and check a persona](docs/screenshots/cast-craft.jpg) | ![Sources, open questions and the auditioned voice of a cast member](docs/screenshots/cast-sources.jpg) |
 | **Craft with AI:** reads the character's Wikipedia article, then checks every statement against a quote. | **Checked, not guessed:** sources with links; guesses go to Open questions; the voice was auditioned and Whisper-checked. |
-| ![Generate speech in a saved voice with Fish Audio Drama 3](docs/screenshots/generate.jpg) | ![Voice Lab with age, pitch, gender and effect presets](docs/screenshots/voicelab.jpg) |
-| **Generate:** type a line, pick a voice, press Generate. | **Voice Lab:** reshape a voice or turn it into a robot, a ghost or a giant. |
+| ![Generate: a line with a pause tag and a slow section, and the Pace setting](docs/screenshots/generate.jpg) | ![Voice Lab: the Elderly preset at 70% strength](docs/screenshots/voicelab.jpg) |
+| **Generate:** type a line, pick a voice, press Generate. Pace and tags such as `[pause 0.8s]` set the rhythm. | **Voice Lab:** reshape a voice or turn it into a robot, a ghost or a giant, at any strength. |
 | ![Music Studio with a song's waveform, style builder and lyrics](docs/screenshots/music.jpg) | ![Discover: browse anime, films, TV, games and characters](docs/screenshots/discover.jpg) |
 | **Music Studio:** compose songs from lyrics and a style, then measure and remix them. | **Discover:** browse and favourite shows, films, games and characters. |
-| ![Library: every voice, generation and song in one list](docs/screenshots/library.jpg) | ![Settings: download models and see each licence](docs/screenshots/settings-models.jpg) |
-| **Library:** every piece of audio, searchable and labelled. | **Models:** one-click downloads from official sources, with each licence shown. |
+| ![Library: every voice, generation and song in one list](docs/screenshots/library.jpg) | ![Settings: Drama 3 sizes with quality warnings, and each model's licence](docs/screenshots/settings-models.jpg) |
+| **Library:** every piece of audio, searchable and labelled. | **Models:** one-click downloads from official sources, each licence shown, and Drama 3 sizes with honest quality labels. |
 | ![Harvest: four steps from a recording to a clean voice](docs/screenshots/harvest.jpg) | |
 | **Harvest:** turn a recording into a clean voice to clone, in four steps. | |
 

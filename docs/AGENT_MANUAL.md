@@ -48,11 +48,11 @@ Replace `<VoiceVault folder>` with the install folder; use forward slashes, or d
 | `vv_status` | Is VoiceVault up; ready speech models; music tools. **Call first.** | no |
 | `vv_list_speech_models` | Ready speech models, and whether each can clone, describe a voice, languages, emotion tags | no |
 | `vv_list_voices` | Saved voices (cloning references), filter by words | no |
-| `vv_speak` | Text → speech, saved to Library/Generations; clone a saved `voice` or use a `voice_description` | adds a file |
+| `vv_speak` | Text → speech, saved to Library/Generations; clone a saved `voice` or use a `voice_description`. `pace` (tight/natural/relaxed/dramatic) and tags in the text (`[pause 0.8s]`, `[slow]…[/slow]`, `[fast]…[/fast]`) set the rhythm | adds a file |
 | `vv_library_search` | Search all audio by words, type, character, label | no |
 | `vv_library_tag` | Add/remove labels, set category, notes, title, character/actor | metadata only |
 | `vv_voice_presets` | Voice Lab presets (age, gender, characters, effects) | no |
-| `vv_voice_shape` | Apply a preset to a voice or generation → preview | preview only |
+| `vv_voice_shape` | Apply a preset to a voice or generation → preview; `strength` and `effects_strength` (0–2) dial it from subtle to exaggerated | preview only |
 | `vv_voice_convert` | Voice-to-voice: delivery of one, sound of another saved voice → preview (slow: ~5–7× clip length) | preview only |
 | `vv_voice_save` | Keep a preview as a generation or as a new voice | adds a file |
 | `vv_music_list_songs` | Songs, or one song in detail (style, lyrics, takes, analysis) | no |
